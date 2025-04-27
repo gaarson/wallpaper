@@ -45,6 +45,7 @@ ipc_read_result_t ipc_read_command(int client_fd, char *buffer, size_t buffer_si
 
 // Принудительное закрытие соединения с клиентом
 void ipc_close_client(int client_fd);
+void ipc_close_all_clients();
 
 // Получить количество активных клиентов
 int ipc_get_client_count(void);

@@ -75,134 +75,44 @@ static void buffer_handle_release(void *data, struct wl_buffer *buffer);
 static bool read_command_from_file(void);
 static void init_wayland(void);
 static void handle_command_change(const char *new_command_str);
+static void handle_animation_modifier(const char *modifier_command);
 
 static void process_ipc_command(int client_fd, const char *command, size_t command_len) {
     UNUSED(client_fd);
     UNUSED(command_len);
-    printf("Main: Processing IPC command: '%s'\n", command);
-    handle_command_change(command);
+
+    // Передаем команду в обработчик модификаторов, а не в основной обработчик смены режима
+    handle_animation_modifier(command);
 }
 
-static void handle_command_change(const char *new_command_str) {
-    printf("DEBUG: handle_command_change received command: '%s'\n",
-           new_command_str ? new_command_str : "(null)");
-
-    bool trigger_immediate_redraw = false;  // Нужна ли немедленная перерисовка?
-    char *new_command_arg_for_renderer = NULL; // Что передать рендереру?
-    char *new_stored_command_arg = NULL;    // Что сохранить в current_command_arg?
-    bool intended_animation_state = animation_enabled; // Начинаем с текущего состояния
-
-    // 1. Интерпретируем команду
-    if (new_command_str) {
-        if (strcmp(new_command_str, ANIMATION_COMMAND) == 0) {
-            // *** ЛОГИКА ПЕРЕКЛЮЧЕНИЯ (TOGGLE) ***
-            intended_animation_state = !animation_enabled; // Инвертируем текущее состояние
-
-            if (intended_animation_state) {
-                // Переключили В состояние "Анимация ВКЛ"
-                printf("DEBUG: Command (%s) toggled animation ON.\n", ANIMATION_COMMAND);
-                new_stored_command_arg = strdup(ANIMATION_COMMAND); // Сохраняем команду анимации
-            } else {
-                // Переключили В состояние "Анимация ВЫКЛ"
-                printf("DEBUG: Command (%s) toggled animation OFF.\n", ANIMATION_COMMAND);
-                new_stored_command_arg = NULL; // Очищаем сохраненную команду
-            }
-            // Передаем рендереру саму команду ANIMATION_COMMAND, чтобы он знал,
-            // что произошло переключение анимационного режима (вкл или выкл)
-            new_command_arg_for_renderer = strdup(ANIMATION_COMMAND);
-            trigger_immediate_redraw = true; // Перерисовка нужна, чтобы показать эффект вкл/выкл
-
-        } else if (new_command_str[0] != '\0') {
-            // Любая другая непустая команда (не ANIMATION_COMMAND)
-            if (animation_enabled) {
-                // Анимация включена: считаем команду модификатором
-                intended_animation_state = true; // Анимация продолжает работать
-                new_command_arg_for_renderer = strdup(new_command_str); // Передаем модификатор рендереру
-                // Сохраняем модификатор как текущее состояние? Или оставить ANIMATION_COMMAND?
-                // Решим СОХРАНЯТЬ модификатор, чтобы current_command_arg отражал последнее изменение.
-                new_stored_command_arg = strdup(new_command_str);
-                printf("DEBUG: Modifier command '%s' received while animation ON.\n", new_command_str);
-                // trigger_immediate_redraw = true; // Раскомментируй, если эффект модификатора должен быть виден немедленно
-            } else {
-                // Анимация выключена: считаем команду установкой статического состояния
-                intended_animation_state = false; // Анимация остается выключенной
-                new_command_arg_for_renderer = strdup(new_command_str); // Передаем рендереру
-                new_stored_command_arg = strdup(new_command_str); // Сохраняем команду статического состояния
-                printf("DEBUG: Static state command '%s' received while animation OFF.\n", new_command_str);
-                trigger_immediate_redraw = true; // Нужна перерисовка статики
-            }
-        } else { // Пустая строка ""
-            intended_animation_state = false; // Считаем остановкой/очисткой
-            new_command_arg_for_renderer = NULL; // NULL для рендерера?
-            new_stored_command_arg = NULL;
-            printf("DEBUG: Empty command received - stopping animation/clearing.\n");
-            trigger_immediate_redraw = true; // Перерисовка для очистки
-        }
-    } else { // NULL command (например, файл удален)
-        intended_animation_state = false; // Считаем остановкой/очисткой
-        new_command_arg_for_renderer = NULL;
-        new_stored_command_arg = NULL;
-        printf("DEBUG: NULL command received - stopping animation/clearing.\n");
-        trigger_immediate_redraw = true; // Перерисовка для очистки
-    }
-
-    // 2. Проверка на ошибки выделения памяти (упрощенная)
-    // Проверяем, если ожидалась строка, а получили NULL (с учетом намеренных NULL)
-    if (new_command_str && new_command_str[0] != '\0' && !new_command_arg_for_renderer) {
-         perror("strdup failed for renderer command");
-         free(new_stored_command_arg);
-         return;
-    }
-     if (new_command_str && new_command_str[0] != '\0' &&
-        !(intended_animation_state == false && strcmp(new_command_str, ANIMATION_COMMAND) == 0) && // Исключаем NULL при выключении через toggle
-        !(new_command_str[0] == '\0') && // Исключаем NULL для пустой команды
-        !(new_command_str == NULL) && // Исключаем NULL для NULL команды
-        !new_stored_command_arg)
-     {
-        perror("strdup failed for stored command");
-        free(new_command_arg_for_renderer);
+static void handle_animation_modifier(const char *modifier_command) {
+    if (!animation_enabled) {
+        // Игнорируем команды-модификаторы, если мы не в режиме анимации
+        // Можно добавить вывод в stderr, если нужно отлаживать
+        // fprintf(stderr, "Warning: Ignoring IPC modifier '%s' while animation is disabled.\n", modifier_command);
         return;
-     }
-
-
-    // 3. Проверяем, изменилось ли общее состояние (флаг анимации ИЛИ сохраненный аргумент)
-    if (intended_animation_state != animation_enabled ||
-        (current_command_arg == NULL && new_stored_command_arg != NULL) ||
-        (current_command_arg != NULL && new_stored_command_arg == NULL) ||
-        (current_command_arg != NULL && new_stored_command_arg != NULL && strcmp(current_command_arg, new_stored_command_arg) != 0))
-    {
-        printf(" -> State change detected. New animation state: %s, New stored command arg: '%s'\n",
-               intended_animation_state ? "true" : "false", new_stored_command_arg ? new_stored_command_arg : "(null)");
-
-        // Обновляем глобальное состояние
-        animation_enabled = intended_animation_state;
-        free(current_command_arg);
-        current_command_arg = new_stored_command_arg; // Забираем владение new_stored_command_arg
-        new_stored_command_arg = NULL;
-    } else {
-        printf(" -> State did not change.\n");
     }
 
-    // 4. Вызываем renderer_handle_command, если для него была команда
-    if (new_command_arg_for_renderer) {
-        printf(" -> Calling renderer_handle_command with: %s\n", new_command_arg_for_renderer);
-        for (int i = 0; i < n_outputs; ++i) {
-            if (outputs[i].renderer_state && outputs[i].configured) {
-                if (!renderer_handle_command(outputs[i].renderer_state, new_command_arg_for_renderer)) {
-                    fprintf(stderr, "Warning: Renderer for output %u failed to handle command '%s'\n", outputs[i].wl_name, new_command_arg_for_renderer);
-                }
+    if (!modifier_command || modifier_command[0] == '\0') {
+        return; // Игнорируем пустые команды
+    }
+
+    // Напрямую передаем команду рендереру
+    bool redraw_needed = false; // Решает, нужна ли немедленная перерисовка после модификатора
+    for (int i = 0; i < n_outputs; ++i) {
+        if (outputs[i].renderer_state && outputs[i].configured) {
+            if (!renderer_handle_command(outputs[i].renderer_state, modifier_command)) {
+                fprintf(stderr, "Warning: Renderer for output %u failed to handle modifier command '%s'\n", outputs[i].wl_name, modifier_command);
+            } else {
+                // Предположим, что успешная обработка модификатора требует перерисовки
+                // (можно сделать сложнее, если рендерер возвращает флаг необходимости)
+                redraw_needed = true;
             }
         }
     }
 
-    // 5. Освобождаем память, которая не перешла в current_command_arg
-    free(new_command_arg_for_renderer);
-    free(new_stored_command_arg);
-
-
-    // 6. Выполняем немедленную перерисовку, если флаг установлен
-    if (trigger_immediate_redraw) {
-        printf(" -> Triggering immediate redraw.\n");
+    // Выполняем немедленную перерисовку, если модификатор мог что-то изменить визуально
+    if (redraw_needed) {
         struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
         uint32_t ms = (uint32_t)(((uint64_t)ts.tv_sec * 1000) + ((uint64_t)ts.tv_nsec / 1000000));
         for (int i = 0; i < n_outputs; ++i) {
@@ -211,9 +121,98 @@ static void handle_command_change(const char *new_command_str) {
              }
         }
     }
+}
 
-    printf("DEBUG: handle_command_change finished. animation_enabled = %s, current_command_arg = '%s'\n",
-           animation_enabled ? "true" : "false", current_command_arg ? current_command_arg : "(null)");
+static void handle_command_change(const char *command_from_file) {
+
+    bool new_mode_is_animation = false;
+    char *new_command_arg_for_renderer = NULL;
+    char *new_stored_command_arg = NULL; // Что будет храниться в current_command_arg
+
+    // Определяем режим по содержимому файла
+    if (command_from_file && strcmp(command_from_file, ANIMATION_COMMAND) == 0) {
+        // --- Режим: Анимация ---
+        new_mode_is_animation = true;
+        // Команда для рендерера и для сохранения - сама ANIMATION_COMMAND
+        new_command_arg_for_renderer = strdup(ANIMATION_COMMAND);
+        new_stored_command_arg = strdup(ANIMATION_COMMAND);
+    } else {
+        // --- Режим: Статика ---
+        new_mode_is_animation = false;
+        // Команда для рендерера и для сохранения - содержимое файла (или NULL)
+        if (command_from_file && command_from_file[0] != '\0') {
+            new_command_arg_for_renderer = strdup(command_from_file);
+            new_stored_command_arg = strdup(command_from_file);
+        } else { // Пусто или NULL -> Очистка
+            new_command_arg_for_renderer = NULL;
+            new_stored_command_arg = NULL;
+        }
+    }
+
+    // --- Проверка выделения памяти ---
+    bool alloc_ok = true;
+    // Упрощенная проверка: если ожидалась строка, а получили NULL
+    if (command_from_file && command_from_file[0] != '\0') {
+         if (!new_command_arg_for_renderer) { perror("strdup failed for renderer command"); alloc_ok = false; }
+         if (!new_stored_command_arg) { perror("strdup failed for stored command"); alloc_ok = false; }
+    }
+    if (!alloc_ok) {
+        free(new_command_arg_for_renderer); free(new_stored_command_arg);
+        return;
+    }
+
+    // --- Проверяем, изменился ли режим или основной аргумент ---
+    bool state_changed = false;
+    if (new_mode_is_animation != animation_enabled ||
+        (current_command_arg == NULL && new_stored_command_arg != NULL) ||
+        (current_command_arg != NULL && new_stored_command_arg == NULL) ||
+        (current_command_arg != NULL && new_stored_command_arg != NULL && strcmp(current_command_arg, new_stored_command_arg) != 0))
+    {
+        state_changed = true;
+    }
+
+    if (state_changed) {
+        bool previous_mode_was_animation = animation_enabled;
+        animation_enabled = new_mode_is_animation; // Устанавливаем новый режим
+
+        // Обновляем сохраненный аргумент/режим
+        free(current_command_arg);
+        current_command_arg = new_stored_command_arg;
+        new_stored_command_arg = NULL; // Владение передано
+
+        // --- Выполняем действия при смене режима ---
+        if (!animation_enabled && previous_mode_was_animation) {
+            // Переключились из Анимации в Статику: закрыть все IPC клиенты
+            // Предполагается, что функция ipc_close_all_clients() существует в ipc.c
+            ipc_close_all_clients();
+        }
+        // Если переключились в Анимацию, прослушивание сокета начнется
+        // автоматически в основном цикле из-за флага animation_enabled.
+
+        // --- Обновляем рендерер ---
+        // Передаем команду для установки нового режима/статики
+        for (int i = 0; i < n_outputs; ++i) {
+            if (outputs[i].renderer_state && outputs[i].configured) {
+                if (!renderer_handle_command(outputs[i].renderer_state, current_command_arg /* Передаем новый сохраненный аргумент */)) {
+                    fprintf(stderr, "Warning: Renderer for output %u failed to handle mode change command '%s'\n", outputs[i].wl_name, current_command_arg ? current_command_arg : "(null)");
+                }
+            }
+        }
+
+        // --- Триггер перерисовки ---
+        struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
+        uint32_t ms = (uint32_t)(((uint64_t)ts.tv_sec * 1000) + ((uint64_t)ts.tv_nsec / 1000000));
+        for (int i = 0; i < n_outputs; ++i) {
+             if(outputs[i].configured) {
+                 render_and_commit_output(&outputs[i], ms);
+             }
+        }
+    }
+    /* else { // Режим и аргумент не изменились } */
+
+    // Освобождаем временную копию, если она не была передана
+    free(new_command_arg_for_renderer);
+    free(new_stored_command_arg); // Должен быть NULL здесь
 }
 
 static void handle_global(void *data, struct wl_registry *reg,
@@ -877,411 +876,324 @@ static void cleanup(void) {
 
 
 int main(int argc, char **argv) {
-    const char *arg_value = (argc > 1) ? argv[1] : NULL;
-    bool command_from_arg = false;
+    // Аргументы командной строки больше не используются для установки режима
+    UNUSED(argc);
+    UNUSED(argv);
 
-    if (arg_value) {
-        printf("Using initial argument: %s\n", arg_value);
-        handle_command_change(arg_value); // Set initial state from arg
-        command_from_arg = true;
-    } else {
-         printf("No initial argument provided.\n");
-         // Initial command will be set by setup_inotify -> read_command_from_file
-         // or default to NULL if file doesn't exist.
-    }
-
+    // 1. Инициализация Wayland
     init_wayland();
     if(n_outputs == 0) {
-         fprintf(stderr, "No Wayland outputs found or successfully initialized.\n");
+         fprintf(stderr, "Error: No Wayland outputs found or successfully initialized.\n");
          cleanup();
          return EXIT_FAILURE;
     }
 
-    if (!ipc_setup("wallpaper_control.sock", process_ipc_command)) {
-        fprintf(stderr, "Warning: Failed to setup IPC socket, continuing without IPC.\n");
+    // 2. Настройка IPC (создание сокета), но ПОКА НЕ СЛУШАЕМ
+    int ipc_listener_fd = -1; // Изначально невалидный
+    if (!ipc_setup("wallpaper_control.sock", process_ipc_command /* Этот колбэк вызывает handle_animation_modifier */)) {
+        fprintf(stderr, "Warning: Failed to setup IPC socket structure, IPC disabled.\n");
+        // ipc_listener_fd остается -1
+    } else {
+        // Получаем FD слушающего сокета, но не добавляем его в poll сразу
+        ipc_listener_fd = ipc_get_listener_fd();
+        if (ipc_listener_fd < 0) {
+             fprintf(stderr, "Warning: Got invalid IPC listener FD after setup, IPC disabled.\n");
+             // Фактически IPC будет выключен, т.к. FD невалидный
+        }
     }
 
+    // 3. Настройка Таймера
     if (!setup_timer(timer_interval_nsec)) {
-        fprintf(stderr, "Failed to setup animation timer.\n");
+        fprintf(stderr, "Error: Failed to setup animation timer.\n");
         cleanup();
         return EXIT_FAILURE;
     }
 
-    // Setup inotify AFTER Wayland init but BEFORE renderer init.
-    // If no command line arg was given, this reads the initial command from file.
+    // 4. Настройка Inotify и УСТАНОВКА НАЧАЛЬНОГО РЕЖИМА
+    // setup_inotify вызовет read_command_from_file -> handle_command_change,
+    // которая установит animation_enabled и current_command_arg по файлу.
     if (!setup_inotify()) {
         fprintf(stderr, "Warning: Failed to setup inotify, command file watching disabled.\n");
         use_inotify = false;
-        // If no arg and inotify failed, ensure initial state is NULL/clear
-        if (!command_from_arg) {
-             handle_command_change(NULL);
-        }
+        // Если inotify не работает, устанавливаем начальное состояние вручную (Статика/Очистка)
+        handle_command_change(NULL);
     }
+    // На данный момент глобальные animation_enabled и current_command_arg установлены.
 
-    printf("Initializing renderers for configured outputs...\n");
+    // 5. Инициализация Рендереров с учетом начального режима
     int configured_outputs = 0;
     for (int i = 0; i < n_outputs; ++i) {
         struct client_output *output = &outputs[i];
-        // Check configured flag set by layer_surface_handle_configure
         if (output->configured && output->width > 0 && output->height > 0) {
-             printf("  Initializing renderer for output %u (%dx%d) with command: %s\n",
-                    output->wl_name, output->width, output->height, current_command_arg ? current_command_arg : "(null)");
-             output->renderer_state = renderer_init(output->width, output->height, current_command_arg);
-             if (!output->renderer_state) {
-                 fprintf(stderr, "Error: Failed to initialize renderer for output %u\n", output->wl_name);
-                 // Mark as not fully usable?
-                 output->configured = false; // Consider this output unusable for rendering
-             } else {
-                 configured_outputs++;
-             }
-        } else {
-             printf("  Skipping renderer init for output %u (not configured or zero size: %dx%d)\n", output->wl_name, output->width, output->height);
-             output->renderer_state = NULL;
+            // Используем current_command_arg, установленный handle_command_change
+            output->renderer_state = renderer_init(output->width, output->height, current_command_arg);
+            if (!output->renderer_state) {
+                fprintf(stderr, "Error: Failed to initialize renderer for output %u\n", output->wl_name);
+                output->configured = false; // Считаем выход нерабочим
+            } else {
+                configured_outputs++;
+            }
         }
     }
-
     if (configured_outputs == 0 && n_outputs > 0) {
         fprintf(stderr, "Error: No outputs were successfully configured with a renderer.\n");
         cleanup();
         return EXIT_FAILURE;
     }
 
-
+    // 6. Подготовка к циклу событий: Настройка Poll
     struct pollfd fds_poll[MAX_POLL_FDS];
-    int n_poll_fds = 0;
-
-    int wayland_fd = -1;
-    int ipc_listener_fd = -1;
-
-    if(display) {
-        wayland_fd = wl_display_get_fd(display);
-        if (wayland_fd >= 0 && n_poll_fds < MAX_POLL_FDS) {
-            fds_poll[n_poll_fds].fd = wayland_fd;
-            fds_poll[n_poll_fds].events = POLLIN;
-            fds_poll[n_poll_fds].revents = 0;
-            n_poll_fds++;
-        } else if (wayland_fd < 0) {
-            fprintf(stderr, "Error: Failed to get Wayland display FD.\n");
-            cleanup();
-            return EXIT_FAILURE;
-        } else {
-             fprintf(stderr, "Error: Poll array too small for Wayland FD.\n");
-             cleanup();
-             return EXIT_FAILURE;
-        }
+    int wayland_fd = wl_display_get_fd(display); // Получаем FD дисплея Wayland
+    if (wayland_fd < 0) {
+        fprintf(stderr, "Error: Failed to get Wayland display FD after init.\n");
+        cleanup();
+        return EXIT_FAILURE;
     }
 
-    if(use_inotify && inotify_fd >= 0 && n_poll_fds < MAX_POLL_FDS) {
-        fds_poll[n_poll_fds].fd = inotify_fd;
-        fds_poll[n_poll_fds].events = POLLIN;
-        fds_poll[n_poll_fds].revents = 0;
-        n_poll_fds++;
-    } else if (use_inotify && inotify_fd >= 0) {
-         fprintf(stderr, "Warning: Poll array too small for Inotify FD. Disabling file watch.\n");
-         use_inotify = false; // Can't poll it
-         inotify_rm_watch(inotify_fd, inotify_watch_descriptor);
-         close(inotify_fd); inotify_fd = -1; inotify_watch_descriptor = -1;
-    }
-
-
-    if(timer_fd >= 0 && n_poll_fds < MAX_POLL_FDS) {
-        fds_poll[n_poll_fds].fd = timer_fd;
-        fds_poll[n_poll_fds].events = POLLIN;
-        fds_poll[n_poll_fds].revents = 0;
-        n_poll_fds++;
-    } else if (timer_fd >= 0) {
-         fprintf(stderr, "Error: Poll array too small for Timer FD.\n");
-         cleanup();
-         return EXIT_FAILURE;
-    }
-
-    ipc_listener_fd = ipc_get_listener_fd();
-    if(ipc_listener_fd >= 0 && n_poll_fds < MAX_POLL_FDS) {
-        fds_poll[n_poll_fds].fd = ipc_listener_fd;
-        fds_poll[n_poll_fds].events = POLLIN;
-        fds_poll[n_poll_fds].revents = 0;
-        n_poll_fds++;
-    } else if (ipc_listener_fd >= 0) {
-         fprintf(stderr, "Warning: Poll array too small for IPC Listener FD. Disabling IPC.\n");
-         ipc_cleanup(); // Clean up listener if we can't poll it
-         ipc_listener_fd = -1;
-    }
-
-    for (int i = n_poll_fds; i < MAX_POLL_FDS; ++i) {
-        fds_poll[i].fd = -1;
-        fds_poll[i].events = 0;
-        fds_poll[i].revents = 0;
-    }
-
+    // Буферы для чтения данных
     char ipc_read_buffer[IPC_READ_BUFFER_SIZE];
     char inotify_event_buffer[INOTIFY_EVENT_BUF_LEN] __attribute__ ((aligned(__alignof__(struct inotify_event))));
 
-
-    printf("Starting main event loop with %d initial poll fds...\n", n_poll_fds);
-    int loop_count = 0;
     bool running = true;
     bool wayland_read_prepared = false;
 
-
+    // --- 7. Основной Цикл Событий ---
     while (running) {
 
-        // Flush before preparing read might be slightly better
+        // 7.1 Сброс буфера Wayland и подготовка к чтению
         int flush_ret = wl_display_flush(display);
         if (flush_ret < 0 && errno != EAGAIN) {
-            perror("wl_display_flush before prepare_read failed");
-            if (errno == EPIPE) { // Connection broken
-                fprintf(stderr, "Wayland connection lost (EPIPE on flush).\n");
-                running = false;
-                continue;
+            perror("wl_display_flush before poll failed");
+            if (errno == EPIPE || errno == ECONNRESET) {
+                fprintf(stderr, "Wayland connection lost (EPIPE/ECONNRESET on flush).\n");
+                running = false; continue;
             }
-            // Other errors might be recoverable, but log them.
         }
 
-        // Prepare Wayland read if no events pending
         if (wl_display_prepare_read(display) == 0) {
              wayland_read_prepared = true;
         } else {
-            // Events were already pending, dispatch them now
-            wayland_read_prepared = false;
-            int dispatch_ret = wl_display_dispatch_pending(display);
-            if (dispatch_ret < 0) {
-                fprintf(stderr, "wl_display_dispatch_pending() before poll failed.\n");
-                running = false;
-                continue;
-            }
+             wayland_read_prepared = false;
+             int dispatch_ret = wl_display_dispatch_pending(display);
+             if (dispatch_ret < 0) {
+                 fprintf(stderr, "wl_display_dispatch_pending() before poll failed.\n");
+                 running = false; continue;
+             }
         }
 
-        // Recalculate active client FDs for poll each iteration
+        // 7.2 ДИНАМИЧЕСКОЕ Формирование Массива для Poll на каждой итерации
         int current_poll_count = 0;
-        // Add static FDs first
-        for (int i=0; i<n_poll_fds; ++i) {
-            if (fds_poll[i].fd == wayland_fd || fds_poll[i].fd == timer_fd || fds_poll[i].fd == inotify_fd || fds_poll[i].fd == ipc_listener_fd) {
-                if (fds_poll[i].fd != -1) { // Check if FD is still valid
-                     // Ensure events are correct (e.g., Wayland only needs POLLIN if read prepared)
-                     fds_poll[i].events = POLLIN;
-                     if (fds_poll[i].fd == wayland_fd && !wayland_read_prepared) {
-                         fds_poll[i].events = 0; // Don't poll Wayland if not prepared
-                     }
-                     fds_poll[i].revents = 0;
-                     current_poll_count++;
-                 }
-            }
-        }
-        // Add active client FDs dynamically
-        int client_fds[MAX_IPC_CLIENTS];
-        int num_clients = ipc_get_active_clients(client_fds, MAX_IPC_CLIENTS);
-        int client_start_index = current_poll_count;
 
-        for(int i=0; i < num_clients && current_poll_count < MAX_POLL_FDS; ++i) {
-            fds_poll[current_poll_count].fd = client_fds[i];
+        // Добавить Wayland FD (Всегда)
+        if (current_poll_count < MAX_POLL_FDS) {
+            fds_poll[current_poll_count].fd = wayland_fd;
+            fds_poll[current_poll_count].events = wayland_read_prepared ? POLLIN : 0; // Слушать только если готовы читать
+            fds_poll[current_poll_count].revents = 0;
+            current_poll_count++;
+        } else { fprintf(stderr, "Poll array too small for Wayland!\n"); running = false; continue; }
+
+        // Добавить Timer FD (Всегда, если валиден)
+        if (timer_fd >= 0 && current_poll_count < MAX_POLL_FDS) {
+            fds_poll[current_poll_count].fd = timer_fd;
             fds_poll[current_poll_count].events = POLLIN;
             fds_poll[current_poll_count].revents = 0;
             current_poll_count++;
+        } else if (timer_fd < 0) { fprintf(stderr, "Timer FD invalid!\n"); running = false; continue; }
+          else { fprintf(stderr, "Poll array too small for Timer!\n"); running = false; continue; }
+
+        // Добавить Inotify FD (Если используется и валиден)
+        if (use_inotify && inotify_fd >= 0 && current_poll_count < MAX_POLL_FDS) {
+            fds_poll[current_poll_count].fd = inotify_fd;
+            fds_poll[current_poll_count].events = POLLIN;
+            fds_poll[current_poll_count].revents = 0;
+            current_poll_count++;
+        } else if (use_inotify && inotify_fd >= 0) {
+            fprintf(stderr, "Warning: Poll array too small for Inotify. Skipping watch this cycle.\n");
         }
-         if (num_clients > 0 && current_poll_count == client_start_index) {
-             // This means poll array was too small for even static FDs + 1 client
-             fprintf(stderr, "Warning: Poll array too small to monitor IPC clients.\n");
-         }
-         // Mark remaining slots as unused
-         for (int i = current_poll_count; i < MAX_POLL_FDS; ++i) {
-              fds_poll[i].fd = -1;
-         }
 
+        // Добавить IPC FDs (ТОЛЬКО если animation_enabled == true и FD валидны)
+        if (animation_enabled) {
+            // Добавить IPC Listener FD
+            if (ipc_listener_fd >= 0 && current_poll_count < MAX_POLL_FDS) {
+                fds_poll[current_poll_count].fd = ipc_listener_fd;
+                fds_poll[current_poll_count].events = POLLIN;
+                fds_poll[current_poll_count].revents = 0;
+                current_poll_count++;
+            } else if (ipc_listener_fd >= 0) { // Если FD валиден, но места нет
+                fprintf(stderr, "Warning: Poll array too small for IPC Listener.\n");
+            } // Если ipc_listener_fd < 0, то ничего не делаем
 
-        int poll_ret = poll(fds_poll, (nfds_t)current_poll_count, -1);
+            // Добавить активные IPC Client FDs
+            int client_fds[MAX_IPC_CLIENTS]; // Получаем список активных клиентов
+            int num_clients = ipc_get_active_clients(client_fds, MAX_IPC_CLIENTS);
+            for(int cli_idx=0; cli_idx < num_clients && current_poll_count < MAX_POLL_FDS; ++cli_idx) {
+                fds_poll[current_poll_count].fd = client_fds[cli_idx];
+                fds_poll[current_poll_count].events = POLLIN;
+                fds_poll[current_poll_count].revents = 0;
+                current_poll_count++;
+            }
+            // Можно добавить предупреждение, если num_clients > MAX_IPC_CLIENTS или если не все влезли в poll
+        }
+
+        // Пометить оставшиеся слоты в fds_poll как неиспользуемые
+        for (int i = current_poll_count; i < MAX_POLL_FDS; ++i) {
+            fds_poll[i].fd = -1;
+            fds_poll[i].events = 0;
+            fds_poll[i].revents = 0;
+        }
+
+        // 7.3 Ожидание событий в Poll
+        int poll_ret = poll(fds_poll, (nfds_t)current_poll_count, -1); // -1 = ждать бесконечно
 
         if (poll_ret < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR) continue; // Прервано сигналом - просто повторить цикл
             perror("poll failed");
-            if (wayland_read_prepared) wl_display_cancel_read(display);
-            running = false;
-            continue;
+            if (wayland_read_prepared) wl_display_cancel_read(display); // Отменить чтение, если готовились
+            running = false; continue;
         }
 
-        // Handle Wayland events first if prepared and ready
+        // 7.4 Обработка событий Wayland (если были готовы читать и событие пришло)
         if (wayland_read_prepared) {
              bool wayland_ready = false;
-             for(int i = 0; i < current_poll_count; ++i) {
-                 if (fds_poll[i].fd == wayland_fd && (fds_poll[i].revents & POLLIN)) {
-                     wayland_ready = true;
-                     break;
+             for(int i = 0; i < current_poll_count; ++i) { // Ищем wayland_fd в актуальном списке poll
+                 if (fds_poll[i].fd == wayland_fd && (fds_poll[i].revents & (POLLIN | POLLERR | POLLHUP))) {
+                     wayland_ready = true; break;
                  }
              }
-
              if (wayland_ready) {
-                 int read_ret = wl_display_read_events(display);
+                 int read_ret = wl_display_read_events(display); // Читаем события
                  if (read_ret < 0) {
-                     if (errno == EPIPE) {
-                         fprintf(stderr, "Wayland connection closed by compositor (EPIPE on read).\n");
-                     } else {
-                         perror("wl_display_read_events failed");
-                     }
-                     running = false; // Exit on read error/closure
-                     continue;
+                     if (errno == EPIPE || errno == ECONNRESET) { fprintf(stderr, "Wayland connection closed by compositor.\n"); }
+                     else { perror("wl_display_read_events failed"); }
+                     running = false; continue;
                  }
-                 // Dispatch events read
-                 int dispatch_ret = wl_display_dispatch_pending(display);
-                  if (dispatch_ret < 0) {
+                 int dispatch_ret = wl_display_dispatch_pending(display); // Обрабатываем прочитанные
+                 if (dispatch_ret < 0) {
                      fprintf(stderr, "wl_display_dispatch_pending() after read failed.\n");
-                     running = false; // Exit on dispatch error
-                     continue;
-                  }
+                     running = false; continue;
+                 }
              } else {
-                  // Poll returned, but Wayland FD not ready - cancel prepared read
-                  wl_display_cancel_read(display);
+                 wl_display_cancel_read(display); // Отменяем, раз событие не пришло
              }
-             wayland_read_prepared = false; // Reset flag regardless
-        } else {
-             // Wayland wasn't prepared, but might have had events dispatched before poll.
-             // We could dispatch again here, but often it's handled by next loop iteration.
-             // wl_display_dispatch_pending(display); // Optional
+             wayland_read_prepared = false; // Сбрасываем флаг
         }
 
-
-        loop_count++;
-
-        // Handle other FDs (iterate through the polled set)
+        // 7.5 Обработка остальных событий (Timer, Inotify, IPC)
         for (int i = 0; i < current_poll_count; ++i) {
-            if (fds_poll[i].fd == -1) continue; // Skip inactive slots
-            if (fds_poll[i].fd == wayland_fd) continue; // Wayland handled above
+            if (fds_poll[i].fd == -1 || fds_poll[i].fd == wayland_fd) continue; // Пропускаем неактивные и Wayland
 
             short revents = fds_poll[i].revents;
             int current_fd = fds_poll[i].fd;
 
+            // Обработка ошибок (POLLERR, POLLHUP, POLLNVAL)
             if (revents & (POLLERR | POLLHUP | POLLNVAL)) {
-                 printf("Main: Error/Hup/Nval event (0x%x) on fd %d.\n", revents, current_fd);
+                 fprintf(stderr, "Error/Hup/Nval event (0x%x) on fd %d.\n", revents, current_fd);
                  if (current_fd == ipc_listener_fd) {
                      fprintf(stderr, "Error on IPC listener socket, disabling IPC.\n");
-                     ipc_cleanup(); // Attempt cleanup
+                     close(ipc_listener_fd); // Закрываем слушающий сокет
                      ipc_listener_fd = -1;
-                     fds_poll[i].fd = -1; // Stop polling it
                  } else if (current_fd == timer_fd) {
                      fprintf(stderr, "Error on Timer FD, disabling timer.\n");
                      close(timer_fd); timer_fd = -1;
-                     fds_poll[i].fd = -1;
                  } else if (current_fd == inotify_fd) {
                      fprintf(stderr, "Error on Inotify FD, disabling file watch.\n");
                      use_inotify = false;
-                     if (inotify_watch_descriptor >= 0) inotify_rm_watch(inotify_fd, inotify_watch_descriptor);
+                     if (inotify_watch_descriptor >= 0) inotify_rm_watch(inotify_fd, inotify_watch_descriptor); // Безопасно вызывать с -1
                      close(inotify_fd); inotify_fd = -1; inotify_watch_descriptor = -1;
-                     fds_poll[i].fd = -1;
-                 } else { // Assume IPC client
-                     printf("Closing client fd %d due to HUP/ERR/NVAL.\n", current_fd);
-                     ipc_close_client(current_fd);
-                     // Client FD removed from poll set automatically on next loop iteration
-                     // because ipc_get_client_fds won't return it.
-                     // Mark current poll slot inactive just in case.
-                     fds_poll[i].fd = -1;
+                 } else { // Ошибка на клиентском сокете IPC
+                     ipc_close_client(current_fd); // Используем функцию модуля IPC
                  }
-                 continue;
+                 // Помечаем FD как неактивный до конца этой итерации цикла
+                 fds_poll[i].fd = -1;
+                 continue; // Переходим к следующему FD
             }
 
+            // Обработка входящих данных (POLLIN)
             if (revents & POLLIN) {
-                if (current_fd == ipc_listener_fd) {
-                    int new_client_fd = ipc_accept_client();
-                    if (new_client_fd != -1) {
-                        printf("Main: Accepted new client fd %d\n", new_client_fd);
-                        // New client will be added to poll set on next loop iteration
-                    }
-                    // else: Accept failed or would block, ignore for now.
-
-                } else if (current_fd == timer_fd) {
+                // Событие Таймера
+                if (current_fd == timer_fd) {
                     uint64_t expirations;
                     ssize_t n_read = read(timer_fd, &expirations, sizeof(expirations));
-
                     if (n_read == sizeof(expirations)) {
-                        if (animation_enabled) {
-                            struct timespec current_time_ts; clock_gettime(CLOCK_MONOTONIC, &current_time_ts);
-                            uint32_t current_time_ms = (uint32_t)(((uint64_t)current_time_ts.tv_sec * 1000) + ((uint64_t)current_time_ts.tv_nsec / 1000000));
+                        if (animation_enabled) { // <-- Рендерим только если включена анимация
+                           struct timespec ct; clock_gettime(CLOCK_MONOTONIC, &ct);
+                           uint32_t ms = (uint32_t)(((uint64_t)ct.tv_sec * 1000) + ((uint64_t)ct.tv_nsec / 1000000));
                             for (int out_idx = 0; out_idx < n_outputs; ++out_idx) {
-                                render_and_commit_output(&outputs[out_idx], current_time_ms);
+                                render_and_commit_output(&outputs[out_idx], ms);
                             }
                         }
                     } else if (n_read == -1 && errno != EAGAIN) {
                         perror("read from timer_fd failed");
-                        close(timer_fd); timer_fd = -1;
-                        fds_poll[i].fd = -1; // Stop polling
+                        close(timer_fd); timer_fd = -1; fds_poll[i].fd = -1;
                     }
-
-                } else if (current_fd == inotify_fd) {
-                    //printf("[Loop %d] Handling Inotify events...\n", loop_count);
+                }
+                // Событие Inotify (Изменение файла -> Смена режима)
+                else if (current_fd == inotify_fd) {
                     ssize_t len = read(inotify_fd, inotify_event_buffer, sizeof(inotify_event_buffer));
-                    if (len < 0 && errno != EAGAIN) {
-                        perror("read inotify_fd failed");
-                         use_inotify = false; // Disable on error
-                         if (inotify_watch_descriptor >= 0) inotify_rm_watch(inotify_fd, inotify_watch_descriptor);
-                         close(inotify_fd); inotify_fd = -1; inotify_watch_descriptor = -1;
-                         fds_poll[i].fd = -1;
-                    } else if (len > 0) {
+                    if (len < 0 && errno != EAGAIN) { /* ... perror, disable inotify ... */ }
+                    else if (len > 0) {
+                        // Цикл по событиям в буфере inotify
                         const struct inotify_event *event;
-                        for (char *ptr = inotify_event_buffer; ptr < inotify_event_buffer + len;
-                             ptr += sizeof(struct inotify_event) + event->len) {
+                        for (char *ptr = inotify_event_buffer; ptr < inotify_event_buffer + len; /* ... */) {
+                            // ... проверки границ ptr ...
+                            event = (const struct inotify_event *) ptr;
+                            // ... проверки границ event->len ...
 
-                             // Bounds check before casting ptr
-                             if ((size_t)(ptr - inotify_event_buffer + sizeof(struct inotify_event)) > (size_t)len) {
-                                 fprintf(stderr, "Inotify read alignment error (event header).\n");
-                                 break;
-                             }
-
-                             event = (const struct inotify_event *) ptr;
-
-                             // Bounds check for name length
-                             if (event->len > 0) {
-                                if ((size_t)(ptr - inotify_event_buffer + sizeof(struct inotify_event) + event->len) > (size_t)len) {
-                                     fprintf(stderr, "Inotify read alignment error (name length).\n");
-                                     break;
-                                }
-                             }
-
-                            // Check if the event is for our specific file
+                            // Если событие для нашего файла - читаем его и меняем режим
                             if (event->len > 0 && strcmp(event->name, command_basename) == 0) {
-                                if (event->mask & (IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE)) {
-                                    printf("  Command file '%s' changed/created (mask: 0x%x), reading...\n", event->name, event->mask);
-                                    read_command_from_file(); // Reads file and calls handle_command_change
-                                } else if (event->mask & (IN_DELETE | IN_MOVED_FROM)) {
-                                    printf("  Command file '%s' deleted/moved_from (mask: 0x%x).\n", event->name, event->mask);
-                                    // Treat deletion as a clear command
-                                    handle_command_change(NULL);
+                                if (event->mask & (IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE | IN_MOVED_FROM)) {
+                                    read_command_from_file(); // Эта функция вызовет handle_command_change
+                                    // Прерываем внутренний цикл for по событиям, т.к. файл уже обработан
+                                    break;
                                 }
                             }
+                             ptr += sizeof(struct inotify_event) + event->len;
                         }
-                    } // else len == 0 or EAGAIN
-
-                } else { // Must be an IPC client FD
-                    ipc_read_result_t read_res = ipc_read_command(current_fd, ipc_read_buffer, sizeof(ipc_read_buffer));
-
-                    switch (read_res) {
-                        case IPC_READ_RESULT_SUCCESS:
-                            // Callback already handled it.
-                            break;
-                        case IPC_READ_RESULT_EOF:
-                        case IPC_READ_RESULT_ERROR:
-                        case IPC_READ_RESULT_INVALID_FD:
-                            printf("Main: IPC client fd %d disconnected or error (result: %d).\n", current_fd, read_res);
-                            // ipc_read_command should close the fd internally.
-                            // The FD will be removed from poll set on next loop.
-                            fds_poll[i].fd = -1; // Mark slot as inactive for this iteration
-                            break;
-                        case IPC_READ_RESULT_WOULD_BLOCK:
-                            break; // No data ready
-                        case IPC_READ_RESULT_TOO_LONG:
-                             fprintf(stderr, "Main: Warning - client fd %d sent command exceeding max length.\n", current_fd);
-                             break;
-                        case IPC_READ_RESULT_NO_HANDLER:
-                             fprintf(stderr, "Main: Error - IPC command received but no handler set (fd %d).\n", current_fd);
-                             break;
-                        case IPC_READ_RESULT_BUFFER_TOO_SMALL:
-                              fprintf(stderr, "Main: Fatal Error - IPC read buffer too small for fd %d. Exiting.\n", current_fd);
-                              running = false;
-                              break;
                     }
-                } // End if/else for FD type
-            } // End if (revents & POLLIN)
-        } // End for loop polling FDs
+                }
+                // Событие IPC Listener (Новое соединение, только если Анимация)
+                else if (current_fd == ipc_listener_fd && animation_enabled) {
+                     int new_client_fd = ipc_accept_client();
+                     // Новый клиент будет добавлен в poll на следующей итерации, если место есть
+                     if (new_client_fd == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                         perror("ipc_accept_client failed"); // Логируем ошибку приема
+                     }
+                }
+                // Событие IPC Client (Команда-модификатор, только если Анимация)
+                else if (animation_enabled) {
+                    // Проверяем, что это не один из служебных FD, которые уже обработаны
+                     if (current_fd != ipc_listener_fd && current_fd != timer_fd && current_fd != inotify_fd) {
+                         // Читаем команду через модуль IPC. Функция чтения вызовет
+                         // process_ipc_command -> handle_animation_modifier
+                         ipc_read_result_t read_res = ipc_read_command(current_fd, ipc_read_buffer, sizeof(ipc_read_buffer));
 
-    } // End while(running)
+                         // Обрабатываем результат чтения (ошибки, EOF)
+                         switch (read_res) {
+                             case IPC_READ_RESULT_EOF:    // Клиент отсоединился
+                             case IPC_READ_RESULT_ERROR:  // Ошибка чтения
+                             case IPC_READ_RESULT_INVALID_FD: // Внутренняя ошибка IPC
+                                 // ipc_read_command должен был закрыть FD
+                                 fds_poll[i].fd = -1; // Убираем из опроса на этой итерации
+                                 break;
+                             case IPC_READ_RESULT_BUFFER_TOO_SMALL: // Фатально
+                                fprintf(stderr, "IPC Fatal Error: Read buffer too small. Exiting.\n");
+                                running = false;
+                                break;
+                             case IPC_READ_RESULT_SUCCESS: // Команда успешно прочитана и передана в handle_animation_modifier
+                             case IPC_READ_RESULT_WOULD_BLOCK: // Нет данных сейчас
+                             case IPC_READ_RESULT_TOO_LONG:    // Команда слишком длинная (IPC модуль должен был обработать)
+                             case IPC_READ_RESULT_NO_HANDLER: // Не должно случиться, т.к. мы его передали
+                             default:
+                                 break; // Ничего не делаем для этих случаев здесь
+                         }
+                     }
+                } // Конец обработки событий IPC (только если animation_enabled)
+            } // Конец if (revents & POLLIN)
+        } // Конец for по fds_poll
 
-    printf("Exiting application.\n");
+    } // Конец while (running)
+
+    // 8. Очистка перед выходом
     cleanup();
     return EXIT_SUCCESS;
 }
