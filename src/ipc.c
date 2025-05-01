@@ -15,6 +15,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "output.h" // Нужен для доступа к списку outputs и их рендерерам
+
 #define MAX_COMMAND_LEN 1024
 
 #define MAX_CLIENTS 5
@@ -25,6 +27,62 @@ static int client_fds[MAX_CLIENTS];
 static int n_clients = 0;
 static char socket_path[PATH_MAX] = {0};
 static ipc_command_handler_t global_command_handler = NULL;
+
+void process_ipc_command(int client_fd, const char *command, size_t command_len) {
+    // Просто передаем команду дальше в обработчик модификаторов
+    // Можно добавить логику в зависимости от команды, если нужно
+    printf("IPC Handler: Received command from fd %d: '%.*s'\n", client_fd, (int)command_len, command);
+    handle_animation_modifier(command);
+    // Можно отправлять ответ клиенту client_fd, если протокол IPC это предполагает
+}
+
+// Применяет команду ко всем активным рендерерам
+void handle_animation_modifier(const char *modifier_command) {
+    // Проверяем, включена ли анимация глобально и есть ли команда
+    if (!config_monitor_is_animation_enabled() || !modifier_command || modifier_command[0] == '\0') {
+        // printf("IPC Handler: Animation disabled or empty command, skipping modifier '%s'\n", modifier_command ? modifier_command : "<null>");
+        return;
+    }
+
+    printf("IPC Handler: Applying modifier '%s' to all outputs...\n", modifier_command);
+    bool redraw_needed = false;
+
+    // Проходим по всем выходам
+    for (struct client_output *output = outputs_list_head; output; output = output->next) {
+        // Применяем команду только если выход сконфигурирован и имеет рендерер
+        if (output->renderer_state && output->configured) {
+            if (renderer_handle_command(output->renderer_state, modifier_command)) {
+                printf("  -> O:%u: Modifier applied successfully.\n", output->wl_name);
+                redraw_needed = true; // Если хотя бы один рендерер принял команду, нужна перерисовка
+            } else {
+                fprintf(stderr, "Warning: Renderer on O:%u failed to handle modifier command '%s'\n",
+                        output->wl_name, modifier_command);
+            }
+        } else {
+             // printf("  -> O:%u: Skipping modifier (not configured or no renderer).\n", output->wl_name);
+        }
+    }
+
+    // Если команда была применена хотя бы к одному рендереру, инициируем перерисовку
+    if (redraw_needed) {
+        printf("IPC Handler: Triggering redraw after applying modifier.\n");
+        // Получаем текущее время для функции рендеринга
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        uint32_t ms = (uint32_t)(((uint64_t)ts.tv_sec * 1000) + ((uint64_t)ts.tv_nsec / 1000000));
+
+        // Запускаем рендеринг для всех сконфигурированных выходов
+        for (struct client_output *output = outputs_list_head; output; output = output->next) {
+             if (output->configured && output->renderer_state) {
+                 render_and_commit_output(output, ms);
+             }
+        }
+         // Может потребоваться wl_display_flush() здесь или в основном цикле после обработки событий
+    } else {
+         printf("IPC Handler: Modifier '%s' did not require a redraw.\n", modifier_command);
+    }
+}
+
 
 static int find_client_slot(int client_fd) {
     for (int i = 0; i < MAX_CLIENTS; ++i) {

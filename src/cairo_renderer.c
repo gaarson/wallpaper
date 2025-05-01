@@ -84,7 +84,6 @@ void renderer_cleanup(RendererState* state) {
 }
 
 bool renderer_handle_command(RendererState* state, const char* command) {
-    printf("CairoRenderer COMMAND");
     if (!state) return false;
 
     printf("CairoRenderer: Handling command: %s\n", command ? command : "(null)");

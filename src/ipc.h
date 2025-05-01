@@ -8,6 +8,8 @@
 // Убедитесь, что это значение совпадает с #define в ipc.c
 #define IPC_MAX_COMMAND_LEN 1024
 
+#include "common.h"
+
 typedef enum {
     IPC_READ_RESULT_SUCCESS,
     IPC_READ_RESULT_WOULD_BLOCK,
@@ -21,6 +23,8 @@ typedef enum {
 
 // Обработчик команд: int client_fd, const char *command, size_t command_len
 typedef void (*ipc_command_handler_t)(int, const char *, size_t);
+void process_ipc_command(int client_fd, const char *command, size_t command_len);
+void handle_animation_modifier(const char *modifier_command);
 
 // Настройка IPC сервера
 // socket_name: имя файла сокета (будет создан в $XDG_RUNTIME_DIR)
