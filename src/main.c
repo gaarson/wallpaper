@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     // Может быть 0 выходов, но если есть выходы, должен быть хотя бы 1 рендерер после roundtrip'ов
     int initial_rendered_outputs = 0;
     for(struct client_output *o = outputs_list_head; o; o = o->next) {
-        if (o->renderer_state && o->configured) {
+        if (o->renderer_state_gl && o->configured) {
              initial_rendered_outputs++;
         }
     }
@@ -317,8 +317,8 @@ int main(int argc, char **argv) {
                              uint32_t time_ms = (uint32_t)(((uint64_t)current_time.tv_sec * 1000) + ((uint64_t)current_time.tv_nsec / 1000000));
                              // Рендерим для всех активных выходов
                              for (struct client_output *output = outputs_list_head; output; output = output->next) {
-                                 if (output->configured && output->renderer_state) {
-                                     render_and_commit_output(output, time_ms);
+                                 if (output->configured && output->renderer_state_gl) {
+                                     present_output_frame(output, time_ms);
                                  }
                              }
                              // Flush после рендеринга сделает следующий вызов wl_display_flush в начале цикла

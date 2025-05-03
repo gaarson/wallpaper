@@ -8,8 +8,6 @@
 // Убедитесь, что это значение совпадает с #define в ipc.c
 #define IPC_MAX_COMMAND_LEN 1024
 
-#include "common.h"
-
 typedef enum {
     IPC_READ_RESULT_SUCCESS,
     IPC_READ_RESULT_WOULD_BLOCK,

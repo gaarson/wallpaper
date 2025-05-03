@@ -50,8 +50,8 @@ void handle_animation_modifier(const char *modifier_command) {
     // Проходим по всем выходам
     for (struct client_output *output = outputs_list_head; output; output = output->next) {
         // Применяем команду только если выход сконфигурирован и имеет рендерер
-        if (output->renderer_state && output->configured) {
-            if (renderer_handle_command(output->renderer_state, modifier_command)) {
+        if (output->renderer_state_gl && output->configured) {
+            if (renderer_core_handle_command(output->renderer_state_gl, modifier_command)) {
                 printf("  -> O:%u: Modifier applied successfully.\n", output->wl_name);
                 redraw_needed = true; // Если хотя бы один рендерер принял команду, нужна перерисовка
             } else {
@@ -73,8 +73,8 @@ void handle_animation_modifier(const char *modifier_command) {
 
         // Запускаем рендеринг для всех сконфигурированных выходов
         for (struct client_output *output = outputs_list_head; output; output = output->next) {
-             if (output->configured && output->renderer_state) {
-                 render_and_commit_output(output, ms);
+             if (output->configured && output->renderer_state_gl) {
+                 present_output_frame(output, ms);
              }
         }
          // Может потребоваться wl_display_flush() здесь или в основном цикле после обработки событий

@@ -24,7 +24,7 @@
 #include "viewporter-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 
-#include "renderer.h" // Предполагается существующим
+#include "renderer/core.h" // Предполагается существующим
 #include "ipc.h"      // Предполагается существующим
 #include "config_monitor.h" // Предполагается существующим
 

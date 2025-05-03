@@ -1,3 +1,4 @@
+#include "src/renderer/core.h"
 #define _GNU_SOURCE // Для strdup, mkostemp, ftruncate64 (хотя последние два тут не нужны)
 #include "config_monitor.h"
 
@@ -51,9 +52,9 @@ void on_config_changed(const char *new_command, bool new_animation_state, void *
     // Применяем новую команду (или NULL, если команда не изменилась) ко всем рендерерам
     bool redraw_needed = false;
     for (struct client_output *output = outputs_list_head; output; output = output->next) {
-        if (output->renderer_state && output->configured) {
+        if (output->renderer_state_gl && output->configured) {
             // Передаем новую команду рендереру. renderer_handle_command должен уметь обрабатывать NULL.
-            if (renderer_handle_command(output->renderer_state, new_command)) {
+            if (renderer_core_handle_command(output->renderer_state_gl, new_command)) {
                  printf("  -> O:%u: Config command applied successfully.\n", output->wl_name);
                  redraw_needed = true;
             } else {
@@ -73,8 +74,8 @@ void on_config_changed(const char *new_command, bool new_animation_state, void *
         uint32_t ms = (uint32_t)(((uint64_t)ts.tv_sec * 1000) + ((uint64_t)ts.tv_nsec / 1000000));
 
         for (struct client_output *output = outputs_list_head; output; output = output->next) {
-             if (output->configured && output->renderer_state) {
-                 render_and_commit_output(output, ms);
+             if (output->configured && output->renderer_state_gl) {
+                 present_output_frame(output, ms);
              }
         }
          // Может потребоваться wl_display_flush() здесь или в основном цикле
