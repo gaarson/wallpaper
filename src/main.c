@@ -20,6 +20,19 @@ int main(int argc, char **argv) {
 
     printf("Starting Animated Wallpaper Application...\n");
 
+    if (!config_monitor_init(on_config_changed, NULL)) {
+        fprintf(stderr, "Fatal: Config monitor initialization failed.\n");
+        // cleanup_application(); // Рано чистить, Wayland еще не создан
+        return EXIT_FAILURE;
+    }
+    g_config_monitor_fd = config_monitor_get_fd();
+    if (g_config_monitor_fd < 0) {
+         fprintf(stderr, "Fatal: Config monitor fd is invalid after init.\n");
+         // cleanup_application();
+         return EXIT_FAILURE;
+    }
+    printf("Config Monitor initialized (fd: %d)\n", g_config_monitor_fd);
+
     // 1. Инициализация Wayland
     if (!init_wayland()) {
         fprintf(stderr, "Fatal: Wayland initialization failed.\n");
@@ -52,18 +65,18 @@ int main(int argc, char **argv) {
 
     // 4. Настройка мониторинга конфигурации
     // on_config_changed находится в config_handler.c
-    if (!config_monitor_init(on_config_changed, NULL)) {
-        fprintf(stderr, "Fatal: Config monitor initialization failed.\n");
-        cleanup_application();
-        return EXIT_FAILURE;
-    }
-    g_config_monitor_fd = config_monitor_get_fd();
-    if (g_config_monitor_fd < 0) {
-         fprintf(stderr, "Fatal: Config monitor fd is invalid after init.\n");
-         cleanup_application();
-         return EXIT_FAILURE;
-    }
-    printf("Config Monitor initialized (fd: %d)\n", g_config_monitor_fd);
+    // if (!config_monitor_init(on_config_changed, NULL)) {
+    //     fprintf(stderr, "Fatal: Config monitor initialization failed.\n");
+    //     cleanup_application();
+    //     return EXIT_FAILURE;
+    // }
+    // g_config_monitor_fd = config_monitor_get_fd();
+    // if (g_config_monitor_fd < 0) {
+    //      fprintf(stderr, "Fatal: Config monitor fd is invalid after init.\n");
+    //      cleanup_application();
+    //      return EXIT_FAILURE;
+    // }
+    // printf("Config Monitor initialized (fd: %d)\n", g_config_monitor_fd);
 
     // Небольшая проверка после инициализации
     // Может быть 0 выходов, но если есть выходы, должен быть хотя бы 1 рендерер после roundtrip'ов

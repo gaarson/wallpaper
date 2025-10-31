@@ -39,11 +39,6 @@ void process_ipc_command(int client_fd, const char *command, size_t command_len)
 // Применяет команду ко всем активным рендерерам
 void handle_animation_modifier(const char *modifier_command) {
     // Проверяем, включена ли анимация глобально и есть ли команда
-    if (!config_monitor_is_animation_enabled() || !modifier_command || modifier_command[0] == '\0') {
-        // printf("IPC Handler: Animation disabled or empty command, skipping modifier '%s'\n", modifier_command ? modifier_command : "<null>");
-        return;
-    }
-
     printf("IPC Handler: Applying modifier '%s' to all outputs...\n", modifier_command);
     bool redraw_needed = false;
 

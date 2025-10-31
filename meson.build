@@ -24,10 +24,9 @@ sources = [
   'src/renderer/default.c',
   'src/renderer/gradient.c',
   'src/renderer/texture.c',
+  'src/renderer/starfield.c',
 
   'src/renderer/core.c',
-  # 'src/cairo_renderer.c',
-  # 'src/renderer_gl.c',
   
   'src/hash_table.c',
   'src/shader_utils.c',

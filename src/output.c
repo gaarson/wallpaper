@@ -546,27 +546,7 @@ bool present_output_frame(struct client_output *output, uint32_t time_ms) {
          }
      }
 
-    // --- Главное изменение: Заменяем attach/damage/commit на eglSwapBuffers ---
-    // Делаем eglMakeCurrent перед swap на всякий случай, если контекст мог измениться
-    // if (eglMakeCurrent(gl_state->egl_display, gl_state->egl_surface, gl_state->egl_surface, gl_state->egl_context) == EGL_FALSE) {
-    //      fprintf(stderr, "RendererGL Error: eglMakeCurrent failed before swap (EGL error: 0x%x)\n", eglGetError());
-    //      return false; // Критическая ошибка
-    // }
-
-   // 3. Обмен буферов через функцию рендерера
-    //    (Внутри renderer_gl_swap_buffers будет вызван eglMakeCurrent перед eglSwapBuffers)
     bool swapped = renderer_core_swap_buffers(gl_state);
-
-    // --- ПРОВЕРЬТЕ, ЧТО СЛЕДУЮЩИЙ БЛОК `if (eglMakeCurrent...` УДАЛЕН ИЗ ВАШЕГО КОДА ---
-    /*
-    // НЕПРАВИЛЬНО: Этот вызов eglMakeCurrent здесь лишний и вызывает ошибку компиляции
-    if (eglMakeCurrent(gl_state->egl_display, gl_state->egl_surface, gl_state->egl_surface, gl_state->egl_context) == EGL_FALSE) {
-         fprintf(stderr, "RendererGL Error: eglMakeCurrent failed before swap (EGL error: 0x%x)\n", eglGetError());
-         return false; // Критическая ошибка
-    }
-    */
-   // --- КОНЕЦ УДАЛЯЕМОГО БЛОКА ---
-
 
     if (!swapped) {
         // Ошибка при обмене буферов

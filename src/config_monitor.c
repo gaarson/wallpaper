@@ -27,6 +27,8 @@ static char command_file_path[PATH_MAX] = {0};
 static char command_dir[PATH_MAX] = {0};
 static char command_basename[NAME_MAX + 1] = {0};
 
+static bool is_initial_load = true; // <-- ДОБАВЬ ЭТОТ ФЛАГ
+
 // Текущее состояние
 static char *current_command_arg = NULL; // Хранит текущую команду (или ANIMATION_COMMAND)
 static bool current_animation_enabled = false;
@@ -134,19 +136,27 @@ static bool read_and_process_command_file(void) {
     }
 
     // --- Логика определения нового состояния ---
+    
     bool new_mode_is_animation = false;
-    char *new_command_arg_for_state = NULL; // Что будет сохранено в current_command_arg
+    char *new_command_arg_for_state = NULL; // Это будет сохранено в current_command_arg
 
-    if (command_from_file && strcmp(command_from_file, ANIMATION_COMMAND) == 0) {
-        new_mode_is_animation = true;
-        new_command_arg_for_state = ANIMATION_COMMAND; // Используем макрос напрямую
-    } else {
-        new_mode_is_animation = false;
-        if (command_from_file) { // Не NULL и не пустая строка (проверено выше)
-             new_command_arg_for_state = command_from_file; // Указывает на buffer
-        } else { // Файл не найден, пуст или ошибка чтения (обработанная)
-             new_command_arg_for_state = NULL;
+    if (command_from_file) {
+        if (strcmp(command_from_file, ANIMATION_COMMAND) == 0) { // ANIMATION_COMMAND == "%SETUP_ANIMATION%"
+            new_mode_is_animation = true; // Градиент - это анимация
+            new_command_arg_for_state = command_from_file;
+        } else if (strcmp(command_from_file, "%SETUP_GRID%") == 0) {
+            new_mode_is_animation = true; // Сетка - это тоже анимация!
+            new_command_arg_for_state = command_from_file;
+        } else if (strcmp(command_from_file, "%SETUP_STARFIELD%") == 0) { 
+            new_mode_is_animation = true; 
+            new_command_arg_for_state = command_from_file;
+        } else {
+            new_mode_is_animation = false; // Статика (цвет или текстура)
+            new_command_arg_for_state = command_from_file;
         }
+    } else { // Файл не найден или пуст
+        new_mode_is_animation = false; // Режим "default" (черный экран) - статика
+        new_command_arg_for_state = NULL;
     }
 
     // --- Проверяем, изменилось ли состояние ---
@@ -169,17 +179,15 @@ static bool read_and_process_command_file(void) {
         current_command_arg = NULL; // На случай ошибки strdup
 
         if (new_command_arg_for_state != NULL) {
-            // Нужно скопировать строку, т.к. new_command_arg_for_state
-            // может указывать на buffer или ANIMATION_COMMAND.
-            // Мы всегда храним собственную копию (или NULL).
             current_command_arg = strdup(new_command_arg_for_state);
             if (!current_command_arg) {
-                perror("ConfigMonitor: strdup failed for new command");
-                current_animation_enabled = false; // Сброс в безопасное состояние?
-                // Вызываем колбэк с ошибкой (NULL, false)
-                 if (change_callback) {
-                    change_callback(NULL, false, callback_user_data);
-                 }
+                // ... (обработка ошибки strdup)
+                // ...
+                // Вызываем колбэк с ошибкой (NULL, false)?
+                // НЕТ, при первой загрузке колбэк вызывать нельзя
+                if (change_callback && !is_initial_load) { // <-- Проверка
+                     change_callback(NULL, false, callback_user_data);
+                }
                 return false; // Ошибка выделения памяти
             }
         }
@@ -187,11 +195,21 @@ static bool read_and_process_command_file(void) {
 
         current_animation_enabled = new_mode_is_animation;
 
-        // Вызываем callback
+        // --- ВЫЗЫВАЕМ CALLBACK ТОЛЬКО ЕСЛИ ЭТО НЕ ПЕРВАЯ ЗАГРУЗКА ---
         if (change_callback) {
-            change_callback(current_command_arg, current_animation_enabled, callback_user_data);
+            if (is_initial_load) {
+                printf("ConfigMonitor: Initial state loaded. Deferring callback.\n");
+                // Не вызываем колбэк при первой загрузке,
+                // так как рендерер еще не создан.
+                // Он сам возьмет это значение через get_current_command().
+            } else {
+                // Это *изменение* файла (от inotify), вызываем колбэк
+                printf("ConfigMonitor: State *changed* by event. Calling callback.\n");
+                change_callback(current_command_arg, current_animation_enabled, callback_user_data);
+            }
         }
     }
+    
     /* else { printf("ConfigMonitor: State unchanged.\n"); } */
 
     return true; // Успешная обработка
@@ -210,6 +228,7 @@ bool config_monitor_init(config_change_callback_t callback, void *user_data) {
     config_monitor_cleanup();
     change_callback = callback;
     callback_user_data = user_data;
+    is_initial_load = true; 
 
     const char *runtime_dir = getenv("XDG_RUNTIME_DIR");
     const char *dir_to_watch = NULL;
@@ -260,6 +279,8 @@ bool config_monitor_init(config_change_callback_t callback, void *user_data) {
          // Не фатально для init, но состояние может быть неверным.
          // Callback уже был вызван с (NULL, false) в случае ошибки strdup.
     }
+
+    is_initial_load = false;
 
     return true;
 }

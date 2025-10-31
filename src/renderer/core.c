@@ -10,6 +10,7 @@
 #include "gradient.h"
 #include "texture.h"
 #include "grid.h"
+#include "starfield.h"
 // #include "mode_grid.h" // Include others as needed
 
 #include <stdlib.h>
@@ -21,12 +22,14 @@
 // --- Constants ---
 #define MODE_REGISTRY_SIZE 16 // Initial size for the hash table
                               //
-#define DEFAULT_MODE_KEY "grid"
+// #define DEFAULT_MODE_KEY "grid"
+#define DEFAULT_MODE_KEY "default"
 
 #define COLOR_MODE_KEY "color"
 #define GRADIENT_MODE_KEY "gradient"
 #define TEXTURE_MODE_KEY "texture"
 #define GRID_MODE_KEY "grid"
+#define STARFIELD_MODE_KEY "starfield"
 
 // --- Forward Declarations for Static Helpers ---
 static bool init_egl_core(RendererCoreState* state);
@@ -532,6 +535,7 @@ static bool populate_mode_registry(RendererCoreState* state) {
      success &= ht_insert(state->mode_registry, GRADIENT_MODE_KEY, &gradient_mode_interface);
      success &= ht_insert(state->mode_registry, GRID_MODE_KEY, &grid_mode_interface);
      success &= ht_insert(state->mode_registry, TEXTURE_MODE_KEY, &texture_mode_interface);
+     success &= ht_insert(state->mode_registry, STARFIELD_MODE_KEY, &starfield_mode_interface);
      // success &= ht_insert(state->mode_registry, GRID_MODE_KEY, &grid_mode_interface);
 
      if (!success) {
@@ -550,7 +554,10 @@ static const RenderModeInterface* find_mode_implementation(HashTable* registry, 
          if (arg[0] == '#') {
              mode_key = COLOR_MODE_KEY;
          } else if (strcmp(arg, "%SETUP_ANIMATION%") == 0) { // Specific command for gradient
-             mode_key = DEFAULT_MODE_KEY;
+             // mode_key = DEFAULT_MODE_KEY;
+             mode_key = GRADIENT_MODE_KEY;
+         } else if (strcmp(arg, "%SETUP_STARFIELD%") == 0) { // <-- ДОБАВЬ ЭТОТ БЛОК
+            mode_key = STARFIELD_MODE_KEY;
          } else if (strcmp(arg, "%SETUP_GRID%") == 0) { // Example for grid
              mode_key = GRID_MODE_KEY;
          } else if (arg[0] != '\0') {
