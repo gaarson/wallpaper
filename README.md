@@ -193,8 +193,6 @@ When an animated mode is active, you can send it commands via the **IPC socket**
 
 <!-- end list -->
 
-```
-
 ## 6\. How to Add a New Render Mode (for Developers)
 
 The application is built around a modular "Render Mode" interface. Adding a new visualizer is a straightforward process that involves four main steps:
