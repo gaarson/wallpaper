@@ -1,4 +1,5 @@
 // mode_grid.c
+#include "../common.h"
 #include "grid.h"
 #include "./../shader_utils.h"
 #include <stdlib.h>
@@ -63,7 +64,7 @@ static GLint get_uniform_location(GLuint program, const char* name) {
 static void* grid_init(const char* arg, GLuint common_vbo) {
     (void)arg;
     (void)common_vbo;
-    printf("ModeGrid GLES3: Initializing...\n");
+    log_debug("ModeGrid GLES3: Initializing...\n");
 
     GridModeState* state = calloc(1, sizeof(GridModeState));
     if (!state) {
@@ -95,7 +96,7 @@ static void* grid_init(const char* arg, GLuint common_vbo) {
     }
 
     // --- Получение локаций uniform-переменных ---
-    printf("ModeGrid GLES3: Getting uniform locations...\n");
+    log_debug("ModeGrid GLES3: Getting uniform locations...\n");
     state->loc_uResolution = get_uniform_location(state->shader_program, "uResolution");
     state->loc_uTime = get_uniform_location(state->shader_program, "uTime");
     state->loc_uGridDensity = get_uniform_location(state->shader_program, "uGridDensity");
@@ -111,7 +112,7 @@ static void* grid_init(const char* arg, GLuint common_vbo) {
     state->loc_uFogEnable = get_uniform_location(state->shader_program, "uFogEnable");
     state->loc_uGridFogEnable = get_uniform_location(state->shader_program, "uGridFogEnable");
 
-    printf("ModeGrid GLES3: Initialized (Program ID: %u).\n", state->shader_program);
+    log_debug("ModeGrid GLES3: Initialized (Program ID: %u).\n", state->shader_program);
     return state;
 }
 
@@ -119,7 +120,7 @@ static void* grid_init(const char* arg, GLuint common_vbo) {
 static void grid_cleanup(void* mode_state) {
     GridModeState* state = (GridModeState*)mode_state;
     if (!state) return;
-    printf("ModeGrid GLES3: Cleaning up...\n");
+    log_debug("ModeGrid GLES3: Cleaning up...\n");
     if (state->shader_program) {
         glDeleteProgram(state->shader_program);
         state->shader_program = 0;
@@ -197,50 +198,50 @@ static bool grid_handle_command(void* mode_state, const char* command) {
 
     if (sscanf(command, "set_density %f", &value1) == 1) {
         state->gridDensity = value1 > 0 ? value1 : 0.1f; // Простая проверка
-        printf("ModeGrid: Set gridDensity=%.2f\n", state->gridDensity); return true;
+        log_debug("ModeGrid: Set gridDensity=%.2f\n", state->gridDensity); return true;
     } else if (sscanf(command, "set_linewidth %f", &value1) == 1) {
         state->lineWidth = value1 > 0 ? value1 : 0.1f;
-        printf("ModeGrid: Set lineWidth=%.2f\n", state->lineWidth); return true;
+        log_debug("ModeGrid: Set lineWidth=%.2f\n", state->lineWidth); return true;
     } else if (sscanf(command, "set_speed %f", &value1) == 1) {
         state->scrollSpeed = value1;
-        printf("ModeGrid: Set scrollSpeed=%.2f\n", state->scrollSpeed); return true;
+        log_debug("ModeGrid: Set scrollSpeed=%.2f\n", state->scrollSpeed); return true;
     } else if (sscanf(command, "set_perspective %f", &value1) == 1) {
         state->perspectiveFactor = value1 > 0 ? value1 : 0.1f;
-        printf("ModeGrid: Set perspectiveFactor=%.2f\n", state->perspectiveFactor); return true;
+        log_debug("ModeGrid: Set perspectiveFactor=%.2f\n", state->perspectiveFactor); return true;
     } else if (sscanf(command, "set_horizon %f", &value1) == 1) {
         state->horizonY = value1 >= 0 && value1 <= 1 ? value1 : 0.5f;
-        printf("ModeGrid: Set horizonY=%.2f\n", state->horizonY); return true;
+        log_debug("ModeGrid: Set horizonY=%.2f\n", state->horizonY); return true;
     } else if (sscanf(command, "set_fog_density %f", &value1) == 1) {
         state->fogDensity = value1 >= 0 ? value1 : 0.0f;
-        printf("ModeGrid: Set fogDensity=%.2f\n", state->fogDensity); return true;
+        log_debug("ModeGrid: Set fogDensity=%.2f\n", state->fogDensity); return true;
     } else if (sscanf(command, "set_fog_enable %d", &value_int) == 1) {
         state->fogEnable = (value_int == 1);
-        printf("ModeGrid: Set fogEnable=%d\n", state->fogEnable); return true;
+        log_debug("ModeGrid: Set fogEnable=%d\n", state->fogEnable); return true;
     } else if (sscanf(command, "set_grid_fog %d", &value_int) == 1) {
         state->gridFogEnable = (value_int == 1);
-        printf("ModeGrid: Set gridFogEnable=%d\n", state->gridFogEnable); return true;
+        log_debug("ModeGrid: Set gridFogEnable=%d\n", state->gridFogEnable); return true;
     } else if (sscanf(command, "set_color_grid %f %f %f", &value1, &value2, &value3) == 3) {
         state->colorGrid[0]=value1; state->colorGrid[1]=value2; state->colorGrid[2]=value3;
-        printf("ModeGrid: Set colorGrid=(%.2f, %.2f, %.2f)\n", value1, value2, value3); return true;
+        log_debug("ModeGrid: Set colorGrid=(%.2f, %.2f, %.2f)\n", value1, value2, value3); return true;
     } else if (sscanf(command, "set_color_ground %f %f %f", &value1, &value2, &value3) == 3) {
         state->colorGround[0]=value1; state->colorGround[1]=value2; state->colorGround[2]=value3;
-        printf("ModeGrid: Set colorGround=(%.2f, %.2f, %.2f)\n", value1, value2, value3); return true;
+        log_debug("ModeGrid: Set colorGround=(%.2f, %.2f, %.2f)\n", value1, value2, value3); return true;
     } // ... Добавить команды для других цветов по аналогии ...
 
     // Пример команды для вывода текущих значений
     else if (strcmp(command, "get_params") == 0) {
-         printf("--- ModeGrid Params ---\n");
-         printf(" Density: %.2f\n", state->gridDensity);
-         printf(" LineWidth: %.2f\n", state->lineWidth);
-         printf(" Speed: %.2f\n", state->scrollSpeed);
-         printf(" Perspective: %.2f\n", state->perspectiveFactor);
-         printf(" Horizon: %.2f\n", state->horizonY);
-         printf(" Fog Density: %.2f\n", state->fogDensity);
-         printf(" Fog Enable: %d\n", state->fogEnable);
-         printf(" Grid Fog Enable: %d\n", state->gridFogEnable);
-         printf(" Color Grid: (%.2f, %.2f, %.2f)\n", state->colorGrid[0], state->colorGrid[1], state->colorGrid[2]);
+         log_debug("--- ModeGrid Params ---\n");
+         log_debug(" Density: %.2f\n", state->gridDensity);
+         log_debug(" LineWidth: %.2f\n", state->lineWidth);
+         log_debug(" Speed: %.2f\n", state->scrollSpeed);
+         log_debug(" Perspective: %.2f\n", state->perspectiveFactor);
+         log_debug(" Horizon: %.2f\n", state->horizonY);
+         log_debug(" Fog Density: %.2f\n", state->fogDensity);
+         log_debug(" Fog Enable: %d\n", state->fogEnable);
+         log_debug(" Grid Fog Enable: %d\n", state->gridFogEnable);
+         log_debug(" Color Grid: (%.2f, %.2f, %.2f)\n", state->colorGrid[0], state->colorGrid[1], state->colorGrid[2]);
          // ... Вывести другие цвета ...
-         printf("-----------------------\n");
+         log_debug("-----------------------\n");
          return true;
     }
 

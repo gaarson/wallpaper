@@ -1,4 +1,4 @@
-
+#include "common.h"
 #include "shader_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,13 +85,13 @@ char* load_shader_source(const char* filename) {
 
 
 GLuint create_program_from_files(const char* vertex_shader_path, const char* fragment_shader_path) {
-    printf("Shader Utils: Loading vertex shader: %s\n", vertex_shader_path);
+    log_debug("Shader Utils: Loading vertex shader: %s\n", vertex_shader_path);
     char* vertex_source = load_shader_source(vertex_shader_path);
     if (!vertex_source) {
         return 0; 
     }
 
-    printf("Shader Utils: Loading fragment shader: %s\n", fragment_shader_path);
+    log_debug("Shader Utils: Loading fragment shader: %s\n", fragment_shader_path);
     char* fragment_source = load_shader_source(fragment_shader_path);
     if (!fragment_source) {
         free(vertex_source);
@@ -147,6 +147,8 @@ GLuint create_program_from_files(const char* vertex_shader_path, const char* fra
         return 0;
     }
 
-    printf("Shader Utils: Program created successfully (ID: %u) from %s and %s\n", program, vertex_shader_path, fragment_shader_path);
+    log_debug("Shader Utils: Program created successfully (ID: %u) from %s and %s\n", program, vertex_shader_path, fragment_shader_path);
     return program;
 }
+
+

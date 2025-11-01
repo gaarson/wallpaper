@@ -1,4 +1,5 @@
 // hash_table.c
+#include "common.h"
 #include "hash_table.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -35,19 +36,19 @@ HashTable* ht_create(size_t size) {
     }
     table->size = size;
     table->count = 0;
-    printf("Hash Table: Created with %zu buckets.\n", size);
+    log_debug("Hash Table: Created with %zu buckets.\n", size);
     return table;
 }
 
 // --- Destroy ---
 void ht_destroy(HashTable* table) {
     if (!table) return;
-    printf("Hash Table: Destroying...\n");
+    log_debug("Hash Table: Destroying...\n");
     for (size_t i = 0; i < table->size; ++i) {
         HashTableNode* current = table->buckets[i];
         while (current != NULL) {
             HashTableNode* next = current->next;
-            printf("  -> Freeing node for key: %s\n", current->key);
+            log_debug("  -> Freeing node for key: %s\n", current->key);
             free(current->key); // Free the copied key
             free(current);      // Free the node itself
             current = next;
@@ -55,7 +56,7 @@ void ht_destroy(HashTable* table) {
     }
     free(table->buckets);
     free(table);
-     printf("Hash Table: Destroyed.\n");
+     log_debug("Hash Table: Destroyed.\n");
 }
 
 // --- Insert ---
@@ -93,7 +94,7 @@ bool ht_insert(HashTable* table, const char* key, const RenderModeInterface* val
     table->buckets[index] = new_node;
     table->count++;
 
-    printf("Hash Table: Inserted key '%s' at index %zu.\n", key, index);
+    log_debug("Hash Table: Inserted key '%s' at index %zu.\n", key, index);
     return true;
 }
 

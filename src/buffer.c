@@ -1,4 +1,5 @@
 #include "buffer.h"
+#include "common.h"
 #include <limits.h> // Для LLONG_MAX, OFF_T_MAX
 #include <sys/syscall.h> // Для SYS_memfd_create (если будем использовать)
 
@@ -29,7 +30,7 @@ int create_shm_file(size_t size) {
                 // композитор будет работать с fd. unlink удаляет имя,
                 // но файл существует, пока fd открыт.
                 unlink(shm_path);
-                 printf("Created SHM file (fd: %d) via XDG_RUNTIME_DIR\n", fd);
+                 log_debug("Created SHM file (fd: %d) via XDG_RUNTIME_DIR\n", fd);
             } else {
                 perror("mkostemp in XDG_RUNTIME_DIR failed");
                 // Продолжаем попытку в /dev/shm
@@ -46,7 +47,7 @@ int create_shm_file(size_t size) {
             fd = mkostemp(shm_path, O_CLOEXEC);
              if (fd >= 0) {
                 unlink(shm_path);
-                 printf("Created SHM file (fd: %d) via /dev/shm\n", fd);
+                 log_debug("Created SHM file (fd: %d) via /dev/shm\n", fd);
              } else {
                  perror("mkostemp in /dev/shm failed");
              }
@@ -230,10 +231,11 @@ void buffer_handle_release(void *data, struct wl_buffer *wl_buffer) {
 
     // Просто помечаем буфер как свободный. Ресурсы НЕ освобождаются здесь.
     entry->busy = false;
-    // printf("Buffer released (fd: %d)\n", entry->fd); // Для отладки
+    // log_debug("Buffer released (fd: %d)\n", entry->fd); // Для отладки
 }
 
 // Определение листенера для buffer_handle_release
 const struct wl_buffer_listener buffer_listener = {
     .release = buffer_handle_release
 };
+

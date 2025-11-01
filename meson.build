@@ -3,6 +3,8 @@ project('wallpaper', 'c',
   default_options: ['warning_level=3', 'c_std=gnu17']
 )
 
+# БЛОК OPTION(...) УДАЛЕН ОТСЮДА
+
 # wl_client_dep = dependency('wayland-client', version : '>=1.18')
 wl_egl_dep = dependency('wayland-egl') # Нужен для wl_egl_window
 egl_dep = dependency('egl')       # EGL API
@@ -14,10 +16,18 @@ m_dep = meson.get_compiler('c').find_library('m', required : true)
 
 inc = include_directories('src/renderer/shaders')
 
+# --- Логика флага отладки ---
+# Эта часть ОСТАЕТСЯ. Она *использует* опцию из meson_options.txt
+if get_option('debug_logs')
+  # Если true, добавляем флаг -DENABLE_DEBUG_LOG к компилятору
+  add_project_arguments('-DENABLE_DEBUG_LOG', language : 'c')
+endif
+# ---
+
 sources = [
   'src/main.c',
   'src/config_monitor.c',
-  
+
   # mods
   'src/renderer/grid.c',
   'src/renderer/color.c',
@@ -27,7 +37,7 @@ sources = [
   'src/renderer/starfield.c',
 
   'src/renderer/core.c',
-  
+
   'src/hash_table.c',
   'src/shader_utils.c',
   'src/buffer.c',

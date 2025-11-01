@@ -1,4 +1,5 @@
 // mode_gradient.c
+#include "../common.h"
 #include "gradient.h"
 #include "./../shader_utils.h" // For create_program_from_files
 #include <stdlib.h>
@@ -27,7 +28,7 @@ typedef struct {
 static void* gradient_init(const char* arg, GLuint common_vbo) {
     (void)arg; // Might be used later for configuration
     (void)common_vbo; // Stored in params for render
-    printf("ModeGradient: Initializing...\n");
+    log_debug("ModeGradient: Initializing...\n");
 
     GradientModeState* state = calloc(1, sizeof(GradientModeState));
     if (!state) { perror("ModeGradient calloc state"); return NULL; }
@@ -51,17 +52,17 @@ static void* gradient_init(const char* arg, GLuint common_vbo) {
         fprintf(stderr, "ModeGradient Warning: Uniform 'uPhase' not found in shader.\n");
     }
 
-    printf("ModeGradient: Initialized (Program ID: %u).\n", state->shader_program);
+    log_debug("ModeGradient: Initialized (Program ID: %u).\n", state->shader_program);
     return state;
 }
 
 static void gradient_cleanup(void* mode_state) {
     GradientModeState* state = (GradientModeState*)mode_state;
     if (!state) return;
-    printf("ModeGradient: Cleaning up...\n");
+    log_debug("ModeGradient: Cleaning up...\n");
     if (state->shader_program) {
         glDeleteProgram(state->shader_program);
-        printf("ModeGradient: Shader program deleted.\n");
+        log_debug("ModeGradient: Shader program deleted.\n");
     }
     free(state);
 }
@@ -123,16 +124,16 @@ static bool gradient_handle_command(void* mode_state, const char* command) {
     // (Same as before: faster, slower, reset_speed)
      if (strcmp(command, "faster") == 0) {
         state->speed_factor *= 1.2;
-        printf("ModeGradient: Speed factor increased to %.2f\n", state->speed_factor);
+        log_debug("ModeGradient: Speed factor increased to %.2f\n", state->speed_factor);
         return true;
     } else if (strcmp(command, "slower") == 0) {
         state->speed_factor /= 1.2;
         if (state->speed_factor < 0.1) state->speed_factor = 0.1;
-        printf("ModeGradient: Speed factor decreased to %.2f\n", state->speed_factor);
+        log_debug("ModeGradient: Speed factor decreased to %.2f\n", state->speed_factor);
         return true;
     } else if (strcmp(command, "reset_speed") == 0) {
         state->speed_factor = 1.0;
-        printf("ModeGradient: Speed factor reset to %.2f\n", state->speed_factor);
+        log_debug("ModeGradient: Speed factor reset to %.2f\n", state->speed_factor);
         return true;
     }
     return false;

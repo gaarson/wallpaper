@@ -27,10 +27,10 @@ void update_animation_timer(void) {
     }
 
     if (any_output_is_animated) {
-        printf("GlobalTimer: At least one output is animated. Arming timer (fd: %d).\n", g_timer_fd);
+        log_debug("GlobalTimer: At least one output is animated. Arming timer (fd: %d).\n", g_timer_fd);
         arm_timer(g_timer_fd, g_frame_interval_ns);
     } else {
-        printf("GlobalTimer: No outputs are animated. Disarming timer (fd: %d).\n", g_timer_fd);
+        log_debug("GlobalTimer: No outputs are animated. Disarming timer (fd: %d).\n", g_timer_fd);
         disarm_timer(g_timer_fd);
     }
 }
@@ -40,9 +40,9 @@ static void cleanup_application(void);
 int main(int argc, char **argv) {
     UNUSED(argc); UNUSED(argv); 
 
-    printf("Starting Animated Wallpaper Application...\n");
+    log_debug("Starting Animated Wallpaper Application...\n");
 
-    printf("Config Monitor initialized (fd: %d)\n", g_config_monitor_fd);
+    log_debug("Config Monitor initialized (fd: %d)\n", g_config_monitor_fd);
 
     g_timer_fd = setup_timer(g_frame_interval_ns);
     if (g_timer_fd < 0) {
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
          fprintf(stderr, "Fatal: Config monitor fd is invalid after init.\n");
          return EXIT_FAILURE;
     }
-    printf("Animation timer initialized (fd: %d)\n", g_timer_fd);
+    log_debug("Animation timer initialized (fd: %d)\n", g_timer_fd);
 
     if (!init_wayland()) {
         fprintf(stderr, "Fatal: Wayland initialization failed.\n");
@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
         if (g_ipc_listener_fd < 0) {
             fprintf(stderr, "Warning: IPC setup reported success, but listener FD is invalid.\n");
         } else {
-            printf("IPC Listener setup on 'wallpaper_control.sock' (fd: %d)\n", g_ipc_listener_fd);
+            log_debug("IPC Listener setup on 'wallpaper_control.sock' (fd: %d)\n", g_ipc_listener_fd);
         }
     } else {
         fprintf(stderr, "Warning: IPC setup failed. IPC control will be unavailable.\n");
@@ -89,9 +89,9 @@ int main(int argc, char **argv) {
      if (n_outputs > 0 && initial_rendered_outputs == 0) {
          fprintf(stderr,"Warning: No outputs were fully configured and rendered after initial setup.\n");
      } else if (initial_rendered_outputs > 0) {
-         printf("Main: Initial setup complete. %d output(s) configured and rendered.\n", initial_rendered_outputs);
+         log_debug("Main: Initial setup complete. %d output(s) configured and rendered.\n", initial_rendered_outputs);
      } else {
-          printf("Main: Initial setup complete. No outputs found yet.\n");
+          log_debug("Main: Initial setup complete. No outputs found yet.\n");
      }
 
 
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
     bool running = true;
     bool wayland_read_prepared = false;
 
-    printf("Entering main event loop...\n");
+    log_debug("Entering main event loop...\n");
     while (running) {
         
         
@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
 
             if (revents & POLLIN) {
                 if (current_fd == g_config_monitor_fd) {
-                    printf("Config monitor event detected.\n");
+                    log_debug("Config monitor event detected.\n");
                     config_monitor_handle_event(); 
                     if (config_monitor_get_fd() < 0) {
                         g_config_monitor_fd = -1;
@@ -266,14 +266,14 @@ int main(int argc, char **argv) {
                     }
  
                 } else if (current_fd == g_ipc_listener_fd) {
-                    printf("IPC listener event: Accepting new client.\n");
+                    log_debug("IPC listener event: Accepting new client.\n");
                     int new_client_fd = ipc_accept_client();
                     if (new_client_fd < 0) {
                         if (errno != EAGAIN && errno != EWOULDBLOCK) {
                             perror("Error accepting IPC client");
                         }
                     } else {
-                        printf("IPC client accepted (fd: %d)\n", new_client_fd);
+                        log_debug("IPC client accepted (fd: %d)\n", new_client_fd);
                     }
 
                 } else {
@@ -313,7 +313,7 @@ int main(int argc, char **argv) {
         } 
     } 
 
-    printf("Exiting main loop.\n");
+    log_debug("Exiting main loop.\n");
     goto cleanup_exit; 
 
 poll_array_full:
@@ -324,13 +324,13 @@ poll_array_full:
 
 cleanup_exit:
     cleanup_application();
-    printf("Application finished.\n");
+    log_debug("Application finished.\n");
     return EXIT_SUCCESS; 
 }
 
 
 static void cleanup_application(void) {
-     printf("--- Starting Application Cleanup ---\n");
+     log_debug("--- Starting Application Cleanup ---\n");
 
      ipc_cleanup(); g_ipc_listener_fd = -1;
 
@@ -339,5 +339,6 @@ static void cleanup_application(void) {
 
      cleanup_wayland();
 
-    printf("--- Application Cleanup Finished ---\n");
+    log_debug("--- Application Cleanup Finished ---\n");
 }
+

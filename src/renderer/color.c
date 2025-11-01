@@ -1,4 +1,5 @@
 // mode_color.c
+#include "../common.h"
 #include "color.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -41,7 +42,7 @@ static bool parse_color_internal(const char* color_str, float *r_out, float *g_o
 
 static void* color_init(const char* arg, GLuint common_vbo) {
     (void)common_vbo; // Unused
-    printf("ModeColor: Initializing with arg: %s\n", arg ? arg : "(null)");
+    log_debug("ModeColor: Initializing with arg: %s\n", arg ? arg : "(null)");
     ColorModeState* state = calloc(1, sizeof(ColorModeState));
     if (!state) {
         perror("ModeColor calloc state");
@@ -57,14 +58,14 @@ static void* color_init(const char* arg, GLuint common_vbo) {
         // return NULL;
         // Let's keep it simple: initialize to black if parse fails, don't trigger core fallback
     }
-     printf("ModeColor: Initialized (Color: %.2f, %.2f, %.2f).\n", state->r, state->g, state->b);
+     log_debug("ModeColor: Initialized (Color: %.2f, %.2f, %.2f).\n", state->r, state->g, state->b);
     return state;
 }
 
 static void color_cleanup(void* mode_state) {
     ColorModeState* state = (ColorModeState*)mode_state;
     if (!state) return;
-    printf("ModeColor: Cleaning up.\n");
+    log_debug("ModeColor: Cleaning up.\n");
     free(state);
 }
 

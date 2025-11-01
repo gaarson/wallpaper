@@ -1,4 +1,5 @@
 // mode_default.c
+#include "../common.h"
 #include "default.h"
 #include <stdlib.h> // For NULL
 #include <stdio.h>  // For printf
@@ -12,7 +13,7 @@
 static void* default_init(const char* arg, GLuint common_vbo) {
     (void)arg; // Unused
     (void)common_vbo; // Unused
-    printf("ModeDefault: Initializing (no state needed).\n");
+    log_debug("ModeDefault: Initializing (no state needed).\n");
     // No allocation needed, return a non-NULL dummy pointer if required
     // or just return (void*)1 to indicate success without state.
     // Let's return NULL and handle it in the core renderer check.
@@ -22,14 +23,14 @@ static void* default_init(const char* arg, GLuint common_vbo) {
 
 static void default_cleanup(void* mode_state) {
     (void)mode_state; // Unused
-    printf("ModeDefault: Cleaning up (no state to clean).\n");
+    log_debug("ModeDefault: Cleaning up (no state to clean).\n");
     // No cleanup needed
 }
 
 static bool default_render(void* mode_state, const RenderParams* params) {
     (void)mode_state; // Unused
     (void)params;   // Unused
-    // printf("ModeDefault: Rendering frame (glClear black).\n");
+    // log_debug("ModeDefault: Rendering frame (glClear black).\n");
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Black
     glClear(GL_COLOR_BUFFER_BIT);
     return true;

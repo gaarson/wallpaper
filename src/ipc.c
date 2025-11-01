@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include "common.h"
 #include "ipc.h"
 
 #include <sys/types.h>
@@ -29,25 +30,19 @@ static char socket_path[PATH_MAX] = {0};
 static ipc_command_handler_t global_command_handler = NULL;
 
 void process_ipc_command(int client_fd, const char *command, size_t command_len) {
-    
-    
-    printf("IPC Handler: Received command from fd %d: '%.*s'\n", client_fd, (int)command_len, command);
+    log_debug("IPC Handler: Received command from fd %d: '%.*s'\n", client_fd, (int)command_len, command);
     handle_animation_modifier(command);
-    
 }
 
-
 void handle_animation_modifier(const char *modifier_command) {
-    
-    printf("IPC Handler: Applying modifier '%s' to all outputs...\n", modifier_command);
+    log_debug("IPC Handler: Applying modifier '%s' to all outputs...\n", modifier_command);
     bool redraw_needed = false;
-
     
     for (struct client_output *output = outputs_list_head; output; output = output->next) {
         
         if (output->renderer_state_gl && output->configured) {
             if (renderer_core_handle_command(output->renderer_state_gl, modifier_command)) {
-                printf("  -> O:%u: Modifier applied successfully.\n", output->wl_name);
+                log_debug("  -> O:%u: Modifier applied successfully.\n", output->wl_name);
                 redraw_needed = true; 
             } else {
                 fprintf(stderr, "Warning: Renderer on O:%u failed to handle modifier command '%s'\n",
@@ -60,7 +55,7 @@ void handle_animation_modifier(const char *modifier_command) {
 
     
     if (redraw_needed) {
-        printf("IPC Handler: Triggering redraw after applying modifier.\n");
+        log_debug("IPC Handler: Triggering redraw after applying modifier.\n");
         
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -74,7 +69,7 @@ void handle_animation_modifier(const char *modifier_command) {
         }
          
     } else {
-         printf("IPC Handler: Modifier '%s' did not require a redraw.\n", modifier_command);
+         log_debug("IPC Handler: Modifier '%s' did not require a redraw.\n", modifier_command);
     }
 }
 
@@ -161,7 +156,7 @@ bool ipc_setup(const char *socket_name, ipc_command_handler_t handler) {
 
     global_command_handler = handler;
 
-    printf("IPC: Listener socket listening on %s (fd: %d)\n", socket_path, listener_fd);
+    log_debug("IPC: Listener socket listening on %s (fd: %d)\n", socket_path, listener_fd);
 
     for (int i = 0; i < MAX_CLIENTS; ++i) client_fds[i] = -1;
     n_clients = 0;
@@ -172,11 +167,11 @@ void ipc_cleanup(void) {
     if (listener_fd >= 0) {
         close(listener_fd);
         listener_fd = -1;
-        printf("IPC: Closed Listener FD.\n");
+        log_debug("IPC: Closed Listener FD.\n");
     }
     if (socket_path[0] != '\0') {
         if (unlink(socket_path) == 0) {
-              printf("IPC: Unlinked socket file: %s\n", socket_path);
+              log_debug("IPC: Unlinked socket file: %s\n", socket_path);
         } else if (errno != ENOENT) {
             perror("IPC Warning: Failed to unlink socket file during cleanup");
         }
@@ -185,7 +180,7 @@ void ipc_cleanup(void) {
 
     ipc_close_all_clients();
 
-    printf("IPC: Cleanup finished.\n");
+    log_debug("IPC: Cleanup finished.\n");
 }
 
 
@@ -213,7 +208,7 @@ int ipc_accept_client(void) {
     }
 
     if (client_slot != -1) {
-        printf("IPC: Accepted client fd %d -> slot %d\n", client_fd, client_slot);
+        log_debug("IPC: Accepted client fd %d -> slot %d\n", client_fd, client_slot);
         client_fds[client_slot] = client_fd;
         n_clients++;
         return client_fd;
@@ -286,7 +281,7 @@ ipc_read_result_t ipc_read_command(int client_fd, char *buffer, size_t buffer_si
         return IPC_READ_RESULT_SUCCESS;
 
     } else if (n_read == 0) {
-        printf("IPC: Client fd %d (slot %d) disconnected (EOF).\n", client_fd, slot);
+        log_debug("IPC: Client fd %d (slot %d) disconnected (EOF).\n", client_fd, slot);
         close(client_fd);
         client_fds[slot] = -1;
         n_clients--;
@@ -308,7 +303,7 @@ ipc_read_result_t ipc_read_command(int client_fd, char *buffer, size_t buffer_si
 void ipc_close_client(int client_fd) {
      int slot = find_client_slot(client_fd);
      if (slot != -1) {
-         printf("IPC: Force closing client fd %d (slot %d)\n", client_fd, slot);
+         log_debug("IPC: Force closing client fd %d (slot %d)\n", client_fd, slot);
          close(client_fd);
          client_fds[slot] = -1;
          n_clients--;
@@ -319,17 +314,17 @@ void ipc_close_client(int client_fd) {
 
 void ipc_close_all_clients(void) {
     if (n_clients <= 0) {
-        printf("IPC: No active clients to close.\n");
+        log_debug("IPC: No active clients to close.\n");
         return;
     }
 
-    printf("IPC: Closing all active client connections (%d)...\n", n_clients);
+    log_debug("IPC: Closing all active client connections (%d)...\n", n_clients);
     int closed_count = 0;
     int initial_clients = n_clients;
 
     for (int i = 0; i < MAX_CLIENTS; ++i) {
         if (client_fds[i] >= 0) {
-            printf("IPC: Closing client fd %d (slot %d)\n", client_fds[i], i);
+            log_debug("IPC: Closing client fd %d (slot %d)\n", client_fds[i], i);
             close(client_fds[i]);
             client_fds[i] = -1;
             closed_count++;
@@ -341,7 +336,7 @@ void ipc_close_all_clients(void) {
     if (closed_count != initial_clients) {
          fprintf(stderr, "IPC Warning: Expected to close %d clients, but closed %d. Resetting count to 0.\n", initial_clients, closed_count);
     } else {
-        printf("IPC: Closed %d client FDs.\n", closed_count);
+        log_debug("IPC: Closed %d client FDs.\n", closed_count);
     }
 }
 

@@ -1,7 +1,12 @@
+// src/renderer/shaders/stars.vert
 #version 300 es
 precision highp float;
 
+#define MAX_LENSES 10
+
 in vec3 aPosition;
+in float aBaseSize;
+in float aBaseBrightness;
 
 uniform mat4 uProjectionMatrix;
 uniform vec3 uCameraPos;
@@ -9,21 +14,34 @@ uniform vec2 uResolution;
 uniform float uCameraSpeed;
 uniform float uUniverseSize;
 
-uniform vec3 uLensPos;
-uniform float uLensRadius;
-uniform float uLensStrength;
-uniform float uLensDepthRange; 
+uniform vec3 uLensPos[MAX_LENSES];
+uniform float uLensRadius[MAX_LENSES];
+uniform float uLensStrength[MAX_LENSES];
+uniform float uLensDepthRange[MAX_LENSES];
+uniform int uActiveLensCount;
+
+uniform float uStarBaseSize;
+uniform float uStarBaseBrightness;
+
+uniform vec3 uNebulaColor1;
+uniform vec3 uNebulaColor2;
+
 
 out float vDepth;
 out float vCameraSpeed;
 out vec3 vBaseColor;
 out float vCameraSpaceZ;
 out float vLensEffect;
+out float vFinalBrightness;
+out float vStableHash;
 
 float hash31(vec3 p) {
-    p = fract(p * 0.1031);
-    p += dot(p, p.zyx + 33.33);
-    return fract((p.x + p.y) * p.z);
+    // [ИСПРАВЛЕНО] Умножаем на "магические" простые числа, 
+    // чтобы разбить пространственную корреляцию.
+    // Это гарантирует, что у близких по координатам звезд будут разные хэши.
+    vec3 p3 = fract(p * vec3(.1031, .11369, .13157)); 
+    p3 += dot(p3, p3.yzx + 19.19);
+    return fract((p3.x + p3.y) * p3.z);
 }
 
 vec3 apply_grav_lens(vec3 star_pos, vec3 lens_pos, float lens_radius, float lens_strength) {
@@ -38,46 +56,44 @@ vec3 apply_grav_lens(vec3 star_pos, vec3 lens_pos, float lens_radius, float lens
 }
 
 void main() {
-    // ... (Логика "беговой дорожки" и vBaseColor без изменений) ...
-    float z_offset = aPosition.z - uCameraPos.z;
-    float wrapped_z_offset = mod(z_offset + (uUniverseSize / 2.0), uUniverseSize) - (uUniverseSize / 2.0);
-    vec3 star_pos = vec3(aPosition.x, aPosition.y, uCameraPos.z + wrapped_z_offset);
-    // ... (генерация vBaseColor) ...
-
-    // --- 3. ЛОГИКА ЛИНЗ ---
-    // Визуальное смещение (как и было)
-    vec3 distorted_pos = apply_grav_lens(star_pos, uLensPos, uLensRadius, uLensStrength);
-
-    // --- ИЗМЕНЕНИЕ: Вычисляем "Силу" эффекта ---
+    // 1. Логика "беговой дорожки"
+    vec3 offset = aPosition - uCameraPos;
+    vec3 wrapped_offset = mod(offset + (uUniverseSize / 2.0), uUniverseSize) - (uUniverseSize / 2.0);
+    vec3 star_pos = uCameraPos + wrapped_offset;
     
-    // 1. Радиальный эффект (как было)
-    //    (Насколько звезда близка к центру линзы по X/Y/Z)
-    float radial_dist = distance(star_pos, uLensPos);
-    float radial_effect = 1.0 - smoothstep(0.0, uLensRadius, radial_dist);
-    radial_effect = pow(radial_effect, 2.0);
+    // 2. Генерация vBaseColor
+    vStableHash = hash31(aPosition);
+    vec3 base_color = mix(uNebulaColor1, uNebulaColor2, vStableHash);
+    float white_mix_factor = (aBaseBrightness - 0.3) / 0.7;
+    vBaseColor = mix(base_color, vec3(1.0), white_mix_factor * 0.75);
 
-    // 2. Глубинный эффект (НОВОЕ)
-    //    (Насколько звезда близка к Z-плоскости линзы)
-    float z_dist = abs(star_pos.z - uLensPos.z);
-    // 1.0 - smoothstep(0.0, uLensDepthRange, z_dist)
-    // Если z_dist = 0, эффект = 1.0 (полный)
-    // Если z_dist = uLensDepthRange, эффект = 0.0 (нет)
-    float depth_effect = 1.0 - smoothstep(0.0, uLensDepthRange, z_dist);
-    depth_effect = pow(depth_effect, 2.0); // (усилим эффект к центру плоскости)
+    // 3. ЛОГИКА ЛИНЗ
+    vec3 distorted_pos = star_pos;
+    vLensEffect = 0.0;
+    for (int i = 0; i < MAX_LENSES; i++) {
+        if (i >= uActiveLensCount) break;
+        distorted_pos = apply_grav_lens(distorted_pos, uLensPos[i], uLensRadius[i], uLensStrength[i]);
+        float radial_dist = distance(star_pos, uLensPos[i]);
+        float radial_effect = 1.0 - smoothstep(0.0, uLensRadius[i], radial_dist);
+        radial_effect = pow(radial_effect, 2.0);
+        float z_dist = abs(star_pos.z - uLensPos[i].z);
+        float depth_effect = 1.0 - smoothstep(0.0, uLensDepthRange[i], z_dist);
+        depth_effect = pow(depth_effect, 2.0);
+        vLensEffect = max(vLensEffect, radial_effect * depth_effect);
+    }
 
-    // 3. Итоговый эффект = Радиальный * Глубинный
-    //    (Эффект будет только если ОБА условия выполнены)
-    vLensEffect = radial_effect * depth_effect;
-    // --- КОНЕЦ ИЗМЕНЕНИЙ ---
-
-    // --- 4. ЛОГИКА ПРОЕКЦИИ ---
+    // 4. ЛОГИКА ПРОЕКЦИИ
     vec3 camera_space_pos = distorted_pos - uCameraPos;
-    // ... (остальной код main без изменений) ...
     vCameraSpaceZ = camera_space_pos.z;
     gl_Position = uProjectionMatrix * vec4(camera_space_pos, 1.0);
+    
     float f_dist = length(camera_space_pos);
     f_dist = max(f_dist, 0.5);
-    gl_PointSize = (1000.0 / f_dist) * (uResolution.y / 10000.0);
+
+    float final_base_size = aBaseSize * uStarBaseSize;
+    gl_PointSize = (1000.0 / f_dist) * (uResolution.y / 10000.0) * final_base_size;
+    
     vDepth = gl_Position.z / gl_Position.w;
     vCameraSpeed = uCameraSpeed;
+    vFinalBrightness = aBaseBrightness * uStarBaseBrightness;
 }

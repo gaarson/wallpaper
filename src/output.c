@@ -1,3 +1,4 @@
+#include "common.h"
 #include "output.h"
 #include <EGL/egl.h> 
 
@@ -35,7 +36,7 @@ static void surface_handle_enter(void *data, struct wl_surface *s, struct wl_out
     UNUSED(s); UNUSED(wl_out);
     struct client_output *output = data;
     if (output && !output->is_visible) {
-        printf("O:%u Surface ENTERED. Notifying main.\n", output->wl_name);
+        log_debug("O:%u Surface ENTERED. Notifying main.\n", output->wl_name);
         output->is_visible = true;
     }
 }
@@ -44,7 +45,7 @@ static void surface_handle_leave(void *data, struct wl_surface *s, struct wl_out
     UNUSED(s); UNUSED(wl_out);
     struct client_output *output = data;
     if (output && output->is_visible) {
-        printf("O:%u Surface LEFT. Notifying main.\n", output->wl_name);
+        log_debug("O:%u Surface LEFT. Notifying main.\n", output->wl_name);
         output->is_visible = false;
     }
 }
@@ -109,7 +110,7 @@ struct client_output* add_output(struct wl_output *wl_out, uint32_t name) {
     outputs_list_head = new_output;
     n_outputs++;
 
-    printf("Output added: %u (Total: %d)\n", name, n_outputs);
+    log_debug("Output added: %u (Total: %d)\n", name, n_outputs);
 
     
     
@@ -145,7 +146,7 @@ static void output_handle_done_impl(void *data, struct wl_output *o) {
 }
 
 static void destroy_output_resources(struct client_output *output) {
-      printf("Destroying resources for Output %u\n", output->wl_name);
+      log_debug("Destroying resources for Output %u\n", output->wl_name);
       output->configured = false; 
 
       if (output->is_visible) {
@@ -157,36 +158,36 @@ static void destroy_output_resources(struct client_output *output) {
           renderer_core_cleanup(output->renderer_state_gl); 
           output->renderer_state_gl = NULL;
           update_animation_timer(); 
-          printf("  -> Renderer GL cleaned up.\n");
+          log_debug("  -> Renderer GL cleaned up.\n");
       }
       
 
       if (output->layer_surface) {
           zwlr_layer_surface_v1_destroy(output->layer_surface);
           output->layer_surface = NULL;
-           printf("  -> Layer surface destroyed.\n");
+           log_debug("  -> Layer surface destroyed.\n");
       }
       if (output->viewport) {
           wp_viewport_destroy(output->viewport);
           output->viewport = NULL;
-           printf("  -> Viewport destroyed.\n");
+           log_debug("  -> Viewport destroyed.\n");
       }
       if (output->fractional_scale_obj) {
           wp_fractional_scale_v1_destroy(output->fractional_scale_obj);
           output->fractional_scale_obj = NULL;
-           printf("  -> Fractional scale object destroyed.\n");
+           log_debug("  -> Fractional scale object destroyed.\n");
       }
       
       if (output->surface) {
           wl_surface_destroy(output->surface);
           output->surface = NULL;
-          printf("  -> Surface destroyed.\n");
+          log_debug("  -> Surface destroyed.\n");
       }
       if (output->wl_output) {
           
           wl_output_release(output->wl_output);
           output->wl_output = NULL;
-          printf("  -> wl_output released.\n");
+          log_debug("  -> wl_output released.\n");
       }
 }
 
@@ -194,7 +195,7 @@ void remove_output(struct client_output *output) {
     if (!output) return;
 
     uint32_t name = output->wl_name;
-    printf("Removing Output %u...\n", name);
+    log_debug("Removing Output %u...\n", name);
 
     destroy_output_resources(output);
 
@@ -210,16 +211,16 @@ void remove_output(struct client_output *output) {
 
     free(output);
     n_outputs--;
-    printf("Output %u removed. (Total: %d)\n", name, n_outputs);
+    log_debug("Output %u removed. (Total: %d)\n", name, n_outputs);
 }
 
 void cleanup_all_outputs(void) {
-    printf("Cleaning up all outputs...\n");
+    log_debug("Cleaning up all outputs...\n");
     while (outputs_list_head) {
         remove_output(outputs_list_head); 
     }
     n_outputs = 0; 
-     printf("All outputs cleaned up.\n");
+     log_debug("All outputs cleaned up.\n");
 }
 
 
@@ -236,7 +237,7 @@ static void create_wayland_output_objects(struct client_output *output) {
         return;
     }
     if (output->surface) {
-        printf("Warning: Surface already exists for O:%u\n", output->wl_name);
+        log_debug("Warning: Surface already exists for O:%u\n", output->wl_name);
         return; 
     }
 
@@ -249,7 +250,7 @@ static void create_wayland_output_objects(struct client_output *output) {
 
     wl_surface_add_listener(output->surface, &surface_listener, output);
 
-    printf("O:%u Surface created.\n", output->wl_name);
+    log_debug("O:%u Surface created.\n", output->wl_name);
 
     
     output->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
@@ -262,7 +263,7 @@ static void create_wayland_output_objects(struct client_output *output) {
         output->surface = NULL;
         return;
     }
-     printf("O:%u Layer surface created.\n", output->wl_name);
+     log_debug("O:%u Layer surface created.\n", output->wl_name);
 
     zwlr_layer_surface_v1_add_listener(output->layer_surface, &layer_surface_listener, output);
 
@@ -278,7 +279,7 @@ static void create_wayland_output_objects(struct client_output *output) {
 
     
     wl_surface_commit(output->surface);
-     printf("O:%u Initial surface commit done.\n", output->wl_name);
+     log_debug("O:%u Initial surface commit done.\n", output->wl_name);
 }
 
 
@@ -289,7 +290,7 @@ void output_handle_scale(void *data, struct wl_output *o, int32_t factor) {
     UNUSED(o);
     if (!out) return;
 
-    printf("Output %u: Received integer scale factor: %d\n", out->wl_name, factor);
+    log_debug("Output %u: Received integer scale factor: %d\n", out->wl_name, factor);
     if (factor <= 0) {
         fprintf(stderr, "Warning: Received non-positive scale factor (%d) for O:%u. Using 1.\n", factor, out->wl_name);
         factor = 1;
@@ -307,14 +308,14 @@ void output_handle_scale(void *data, struct wl_output *o, int32_t factor) {
 void output_handle_name(void *data, struct wl_output *o, const char *name) {
      struct client_output *out = data; UNUSED(o);
      if (!out) return;
-     printf("Output %u Name: %s\n", out->wl_name, name ? name : "<null>");
+     log_debug("Output %u Name: %s\n", out->wl_name, name ? name : "<null>");
      
 }
 
 void output_handle_description(void *data, struct wl_output *o, const char *desc) {
      struct client_output *out = data; UNUSED(o);
      if (!out) return;
-     printf("Output %u Description: %s\n", out->wl_name, desc ? desc : "<null>");
+     log_debug("Output %u Description: %s\n", out->wl_name, desc ? desc : "<null>");
      
 }
 
@@ -332,7 +333,7 @@ void fractional_scale_handle_preferred_scale(void *data,
 
     double new_fractional_scale = (double)scale_numerator / 120.0;
 
-    printf("Output %u: Received fractional scale numerator: %u => scale: %.2f\n",
+    log_debug("Output %u: Received fractional scale numerator: %u => scale: %.2f\n",
            output->wl_name, scale_numerator, new_fractional_scale);
 
      if (new_fractional_scale <= 0) {
@@ -357,7 +358,7 @@ void layer_surface_handle_configure(void *data, struct zwlr_layer_surface_v1 *ls
     UNUSED(ls);
     if (!output) return;
 
-    printf("Layer surface configure O:%u Serial:%u Logical Size: %ux%u\n",
+    log_debug("Layer surface configure O:%u Serial:%u Logical Size: %ux%u\n",
            output->wl_name, serial, width, height);
 
      if (width == 0 || height == 0) {
@@ -386,7 +387,7 @@ void layer_surface_handle_configure(void *data, struct zwlr_layer_surface_v1 *ls
             g_fractional_scale_manager, output->surface);
         if (output->fractional_scale_obj) {
             wp_fractional_scale_v1_add_listener(output->fractional_scale_obj, &fractional_scale_listener, output);
-            printf("O:%u Added fractional scale listener.\n", output->wl_name);
+            log_debug("O:%u Added fractional scale listener.\n", output->wl_name);
         } else {
             fprintf(stderr, "O:%u Failed to get fractional_scale object. Fractional scaling might not work.\n", output->wl_name);
             output->fractional_scale = 0.0;
@@ -438,7 +439,7 @@ void check_and_reinit_renderer(struct client_output *output) {
     bool need_full_reinit = !output->renderer_state_gl;
 
     if (need_full_reinit) {
-         printf("O:%u Initializing GL renderer. Logical:%dx%d Scale:%.2f (Physical: %dx%d)\n",
+         log_debug("O:%u Initializing GL renderer. Logical:%dx%d Scale:%.2f (Physical: %dx%d)\n",
                output->wl_name, output->logical_width, output->logical_height, scale, physical_width, physical_height);
 
         
@@ -465,18 +466,18 @@ void check_and_reinit_renderer(struct client_output *output) {
             output->configured = false;
             return;
         }
-        printf("O:%u GL Renderer initialized successfully.\n", output->wl_name);
+        log_debug("O:%u GL Renderer initialized successfully.\n", output->wl_name);
 
         update_animation_timer();
 
         if (output->renderer_state_gl) {
-            printf("O:%u Resizing EGL window via renderer function to %dx%d\n",
+            log_debug("O:%u Resizing EGL window via renderer function to %dx%d\n",
                    output->wl_name, physical_width, physical_height);
             renderer_core_resize(output->renderer_state_gl, physical_width, physical_height, scale);
         }
 
         
-        printf("O:%u Triggering initial render after init.\n", output->wl_name);
+        log_debug("O:%u Triggering initial render after init.\n", output->wl_name);
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
         uint32_t ms = (uint32_t)(((uint64_t)ts.tv_sec * 1000) + ((uint64_t)ts.tv_nsec / 1000000));
@@ -485,13 +486,13 @@ void check_and_reinit_renderer(struct client_output *output) {
 
     } else {
         if (output->renderer_state_gl) {
-            printf("O:%u Resizing EGL window (update) to %dx%d\n", output->wl_name, physical_width, physical_height);
+            log_debug("O:%u Resizing EGL window (update) to %dx%d\n", output->wl_name, physical_width, physical_height);
             renderer_core_resize(output->renderer_state_gl, physical_width, physical_height, scale);
 
             
             
             
-             printf("O:%u Triggering render after EGL window resize.\n", output->wl_name);
+             log_debug("O:%u Triggering render after EGL window resize.\n", output->wl_name);
              struct timespec ts;
              clock_gettime(CLOCK_MONOTONIC, &ts);
              uint32_t ms = (uint32_t)(((uint64_t)ts.tv_sec * 1000) + ((uint64_t)ts.tv_nsec / 1000000));
@@ -534,7 +535,7 @@ bool draw_frame_and_commit(struct client_output *output, uint32_t time_ms) {
              if (!output->viewport) {
                  fprintf(stderr, "Error: Failed to get viewport for O:%u surface. Scaling may be incorrect.\n", output->wl_name);
              } else {
-                 printf("O:%u Viewport created.\n", output->wl_name);
+                 log_debug("O:%u Viewport created.\n", output->wl_name);
              }
         }
         if (output->viewport) {
@@ -585,3 +586,5 @@ bool present_output_frame(struct client_output *output, uint32_t time_ms) {
 
     return true;
 }
+
+

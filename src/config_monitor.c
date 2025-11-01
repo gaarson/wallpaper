@@ -2,6 +2,7 @@
 #define _GNU_SOURCE 
 #include "config_monitor.h"
 
+#include "common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,7 +40,7 @@ static void *callback_user_data = NULL;
 void on_config_changed(const char *new_command, void *user_data) {
     UNUSED(user_data); 
 
-    printf("Config Handler: Configuration changed! New Command: '%s'\n",
+    log_debug("Config Handler: Configuration changed! New Command: '%s'\n",
            new_command ? new_command : "<null>");
 
     bool redraw_needed = false;
@@ -47,7 +48,7 @@ void on_config_changed(const char *new_command, void *user_data) {
         if (output->renderer_state_gl && output->configured) {
             
                 if (renderer_core_set_mode(output->renderer_state_gl, new_command)) { 
-                    printf("  -> O:%u: Config command applied successfully.\n", output->wl_name);
+                    log_debug("  -> O:%u: Config command applied successfully.\n", output->wl_name);
                     redraw_needed = true;
                 } else {
                     fprintf(stderr, "Warning: Renderer on O:%u failed to handle config command '%s'\n",
@@ -57,7 +58,7 @@ void on_config_changed(const char *new_command, void *user_data) {
     }
     update_animation_timer(); 
     if (redraw_needed || true) { 
-        printf("Config Handler: Triggering redraw due to config change.\n");
+        log_debug("Config Handler: Triggering redraw due to config change.\n");
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
         uint32_t ms = (uint32_t)(((uint64_t)ts.tv_sec * 1000) + ((uint64_t)ts.tv_nsec / 1000000));
@@ -75,7 +76,7 @@ static bool read_and_process_command_file(void) {
     if (command_file_path[0] == '\0') {
         
         if (current_command_arg != NULL) {
-             printf("ConfigMonitor: Path not set, resetting state.\n");
+             log_debug("ConfigMonitor: Path not set, resetting state.\n");
              free(current_command_arg);
              current_command_arg = NULL;
              if (change_callback) {
@@ -139,7 +140,7 @@ static bool read_and_process_command_file(void) {
     }
 
     if (state_changed) {
-        printf("ConfigMonitor: State change detected. New Command: '%s'\n",
+        log_debug("ConfigMonitor: State change detected. New Command: '%s'\n",
                new_command_arg_for_state ? new_command_arg_for_state : "(null)");
 
         
@@ -160,9 +161,9 @@ static bool read_and_process_command_file(void) {
         
         if (change_callback) {
             if (is_initial_load) {
-                printf("ConfigMonitor: Initial state loaded. Deferring callback.\n");
+                log_debug("ConfigMonitor: Initial state loaded. Deferring callback.\n");
             } else {
-                printf("ConfigMonitor: State *changed* by event. Calling callback.\n");
+                log_debug("ConfigMonitor: State *changed* by event. Calling callback.\n");
                 
                 change_callback(current_command_arg, callback_user_data);
             }
@@ -227,7 +228,7 @@ bool config_monitor_init(config_change_callback_t callback, void *user_data) {
         return false;
     }
 
-    printf("ConfigMonitor: Watching directory '%s' for events related to '%s' (fd: %d, wd: %d)\n",
+    log_debug("ConfigMonitor: Watching directory '%s' for events related to '%s' (fd: %d, wd: %d)\n",
            command_dir, command_basename, inotify_fd, inotify_watch_descriptor);
 
     
@@ -275,7 +276,7 @@ void config_monitor_handle_event(void) {
             if (event->wd == inotify_watch_descriptor && event->len > 0 && strcmp(event->name, command_basename) == 0) {
                 
                 if (event->mask & (IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE | IN_MOVED_FROM)) {
-                     printf("ConfigMonitor: Relevant event (mask 0x%x) for '%s' detected.\n", event->mask, command_basename);
+                     log_debug("ConfigMonitor: Relevant event (mask 0x%x) for '%s' detected.\n", event->mask, command_basename);
                     relevant_event_found = true;
                     
                     
@@ -321,7 +322,7 @@ const char* config_monitor_get_current_command(void) {
 
 void config_monitor_cleanup(void) {
     if (inotify_fd >= 0) {
-        printf("ConfigMonitor: Cleaning up...\n");
+        log_debug("ConfigMonitor: Cleaning up...\n");
         if (inotify_watch_descriptor >= 0) {
             inotify_rm_watch(inotify_fd, inotify_watch_descriptor);
             inotify_watch_descriptor = -1;

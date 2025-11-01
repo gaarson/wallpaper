@@ -1,3 +1,4 @@
+#include "common.h"
 #include "timer.h"
 
 void arm_timer(int timer_fd, long interval_ns) {
@@ -71,15 +72,16 @@ int setup_timer(long interval_ns) {
         return -1;
     }
 
-    printf("Timer configured: interval %ld ns (fd: %d)\n", interval_ns, timer_fd);
+    log_debug("Timer configured: interval %ld ns (fd: %d)\n", interval_ns, timer_fd);
     return timer_fd;
 }
 
 void cleanup_timer(int timer_fd) {
      if (timer_fd >= 0) {
-         printf("Closing timer fd: %d\n", timer_fd);
+         log_debug("Closing timer fd: %d\n", timer_fd);
          if (close(timer_fd) == -1) {
              perror("Warning: close timer_fd failed");
          }
      }
 }
+

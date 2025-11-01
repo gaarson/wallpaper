@@ -1,4 +1,5 @@
 // mode_texture.c
+#include "../common.h"
 #include "texture.h"
 #include "./../shader_utils.h"
 #include <stdlib.h>
@@ -99,7 +100,7 @@ static bool load_texture_internal(TextureModeState* state, const char* image_pat
      state->image_path = strdup(image_path); // Store the path
      if (!state->image_path) { perror("ModeTexture strdup image_path"); /* Non-fatal */ }
 
-     printf("ModeTexture: Loaded texture '%s' (ID: %u, %dx%d, %d ch)\n",
+     log_debug("ModeTexture: Loaded texture '%s' (ID: %u, %dx%d, %d ch)\n",
             image_path, state->texture_id, width, height, channels);
      return true;
  }
@@ -112,7 +113,7 @@ static void* texture_init(const char* arg, GLuint common_vbo) {
         return NULL;
     }
     (void)common_vbo; // Stored in params
-    printf("ModeTexture: Initializing with image path: %s\n", arg);
+    log_debug("ModeTexture: Initializing with image path: %s\n", arg);
 
     TextureModeState* state = calloc(1, sizeof(TextureModeState));
     if (!state) { perror("ModeTexture calloc state"); return NULL; }
@@ -146,21 +147,21 @@ static void* texture_init(const char* arg, GLuint common_vbo) {
          return NULL;
     }
 
-    printf("ModeTexture: Initialized (Program: %u, Texture: %u).\n", state->shader_program, state->texture_id);
+    log_debug("ModeTexture: Initialized (Program: %u, Texture: %u).\n", state->shader_program, state->texture_id);
     return state;
 }
 
 static void texture_cleanup(void* mode_state) {
     TextureModeState* state = (TextureModeState*)mode_state;
     if (!state) return;
-    printf("ModeTexture: Cleaning up...\n");
+    log_debug("ModeTexture: Cleaning up...\n");
     if (state->shader_program) {
         glDeleteProgram(state->shader_program);
-        printf("ModeTexture: Shader program deleted.\n");
+        log_debug("ModeTexture: Shader program deleted.\n");
     }
     if (state->texture_id) {
         glDeleteTextures(1, &state->texture_id);
-        printf("ModeTexture: Texture deleted.\n");
+        log_debug("ModeTexture: Texture deleted.\n");
     }
     free(state->image_path);
     free(state);

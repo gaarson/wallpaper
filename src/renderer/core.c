@@ -1,4 +1,5 @@
 
+#include "../common.h"
 #include "core.h"
 #include "mode.h"
 #include "./../hash_table.h"
@@ -44,7 +45,7 @@ RendererCoreState* renderer_core_init(struct wl_display* display, struct wl_surf
                                       int initial_logical_width, int initial_logical_height,
                                       double initial_scale, const char* initial_arg)
 {
-    printf("Core: Initializing...\n");
+    log_debug("Core: Initializing...\n");
     RendererCoreState* state = calloc(1, sizeof(RendererCoreState));
     if (!state) { perror("Core calloc state"); return NULL; }
 
@@ -91,17 +92,17 @@ RendererCoreState* renderer_core_init(struct wl_display* display, struct wl_surf
          
     }
 
-    printf("Core: Initialization complete.\n");
+    log_debug("Core: Initialization complete.\n");
     return state;
 }
 
 void renderer_core_cleanup(RendererCoreState* state) {
     if (!state) return;
-    printf("Core: Cleaning up...\n");
+    log_debug("Core: Cleaning up...\n");
 
     
     if (state->active_mode_impl && state->active_mode_impl->cleanup) {
-        printf("Core: Cleaning up active mode...\n");
+        log_debug("Core: Cleaning up active mode...\n");
         state->active_mode_impl->cleanup(state->active_mode_state);
     }
     state->active_mode_impl = NULL;
@@ -118,13 +119,13 @@ void renderer_core_cleanup(RendererCoreState* state) {
     state->mode_registry = NULL;
 
     free(state);
-    printf("Core: Cleanup complete.\n");
+    log_debug("Core: Cleanup complete.\n");
 }
 
 
 bool renderer_core_set_mode(RendererCoreState* state, const char* full_command_arg) {
     if (!state || !state->mode_registry) return false;
-    printf("Core: Setting mode with full command: %s\n", full_command_arg ? full_command_arg : "(null)");
+    log_debug("Core: Setting mode with full command: %s\n", full_command_arg ? full_command_arg : "(null)");
 
     char* mode_key = NULL;
     char* mode_arg = NULL;
@@ -160,9 +161,9 @@ bool renderer_core_set_mode(RendererCoreState* state, const char* full_command_a
                         mode_arg = NULL; 
                     }
                 }
-                printf("Core: Parsed mode key '%s', arg '%s'\n", mode_key, mode_arg ? mode_arg : "(null)");
+                log_debug("Core: Parsed mode key '%s', arg '%s'\n", mode_key, mode_arg ? mode_arg : "(null)");
             } else {
-                 printf("Core Warning: Mode key '%s' not found in registry. Falling back.\n", mode_key);
+                 log_debug("Core Warning: Mode key '%s' not found in registry. Falling back.\n", mode_key);
             }
         }
     }
@@ -188,14 +189,14 @@ fallback_to_default:
     }
     
     if (state->active_mode_impl && state->active_mode_impl->cleanup) {
-        printf("Core: Cleaning up previous mode...\n");
+        log_debug("Core: Cleaning up previous mode...\n");
         state->active_mode_impl->cleanup(state->active_mode_state);
     }
     state->active_mode_impl = NULL;
     state->active_mode_state = NULL;
 
     
-    printf("Core: Initializing requested mode...\n");
+    log_debug("Core: Initializing requested mode...\n");
 
     void* new_state = NULL;
     bool init_success = false;
@@ -214,7 +215,7 @@ fallback_to_default:
     if (command_copy) free(command_copy);
 
     if (init_success) {
-        printf("Core: Mode initialized successfully.\n");
+        log_debug("Core: Mode initialized successfully.\n");
         state->active_mode_impl = requested_impl;
         state->active_mode_state = new_state;
     } else {
@@ -224,13 +225,13 @@ fallback_to_default:
 
         const RenderModeInterface* default_impl = ht_lookup(state->mode_registry, DEFAULT_MODE_KEY);
         if (default_impl && default_impl->init) {
-             printf("Core: Initializing default mode...\n");
+             log_debug("Core: Initializing default mode...\n");
              
              new_state = default_impl->init(NULL, state->quad_vbo);
              if (new_state) {
                  state->active_mode_impl = default_impl;
                  state->active_mode_state = new_state;
-                 printf("Core: Default mode initialized successfully.\n");
+                 log_debug("Core: Default mode initialized successfully.\n");
              } else {
                  fprintf(stderr, "Core CRITICAL Error: Failed to initialize default mode!\n");
                  
@@ -246,7 +247,7 @@ fallback_to_default:
     if (state->active_mode_impl && state->active_mode_impl->resize) {
          int physical_width = (int)round(state->current_logical_width * state->current_scale);
          int physical_height = (int)round(state->current_logical_height * state->current_scale);
-          printf("Core: Notifying new mode of initial size %dx%d\n", physical_width, physical_height);
+          log_debug("Core: Notifying new mode of initial size %dx%d\n", physical_width, physical_height);
          state->active_mode_impl->resize(state->active_mode_state, physical_width, physical_height);
     }
 
@@ -256,16 +257,16 @@ fallback_to_default:
 
 bool renderer_core_handle_command(RendererCoreState* state, const char* command) {
     if (!state || !command) return false;
-    printf("Core: Handling command: %s\n", command);
+    log_debug("Core: Handling command: %s\n", command);
 
     if (state->active_mode_impl && state->active_mode_impl->handle_command) {
         if (state->active_mode_impl->handle_command(state->active_mode_state, command)) {
-            printf("Core: Command handled by active mode.\n");
+            log_debug("Core: Command handled by active mode.\n");
             return true; 
         }
     }
 
-    printf("Core: Command not handled by active mode.\n");
+    log_debug("Core: Command not handled by active mode.\n");
     return false; 
 }
 
@@ -374,14 +375,14 @@ void renderer_core_resize(RendererCoreState* state, int logical_width, int logic
      int physical_width = (int)round(logical_width * scale);
      int physical_height = (int)round(logical_height * scale);
 
-     printf("Core: Resizing to %dx%d logical, %dx%d physical (@%.2fx)\n",
+     log_debug("Core: Resizing to %dx%d logical, %dx%d physical (@%.2fx)\n",
             logical_width, logical_height, physical_width, physical_height, scale);
 
 
      
      if (state->egl_window) {
          wl_egl_window_resize(state->egl_window, physical_width, physical_height, 0, 0);
-          printf("Core: Resized wl_egl_window.\n");
+          log_debug("Core: Resized wl_egl_window.\n");
      } else {
           fprintf(stderr, "Core Warning: Cannot resize null EGL window.\n");
      }
@@ -389,7 +390,7 @@ void renderer_core_resize(RendererCoreState* state, int logical_width, int logic
 
      
      if (state->active_mode_impl && state->active_mode_impl->resize) {
-          printf("Core: Notifying active mode of resize.\n");
+          log_debug("Core: Notifying active mode of resize.\n");
          
          
          state->active_mode_impl->resize(state->active_mode_state, physical_width, physical_height);
@@ -408,14 +409,14 @@ bool renderer_core_needs_redraw(RendererCoreState* state) {
 
 
 static bool init_egl_core(RendererCoreState* state) {
-     printf("Core EGL: Initializing...\n");
+     log_debug("Core EGL: Initializing...\n");
      
      state->egl_display = eglGetDisplay((EGLNativeDisplayType)state->wayland_display);
      if (state->egl_display == EGL_NO_DISPLAY) { /*...*/ return false; }
 
      EGLint major, minor;
      if (eglInitialize(state->egl_display, &major, &minor) == EGL_FALSE) { /*...*/ return false; }
-     printf("Core EGL: Version %d.%d\n", major, minor);
+     log_debug("Core EGL: Version %d.%d\n", major, minor);
 
      
      const EGLint config_attribs[] = {
@@ -456,13 +457,13 @@ static bool init_egl_core(RendererCoreState* state) {
      }
 
      eglSwapInterval(state->egl_display, 1); 
-     printf("Core EGL: Initialized successfully.\n");
+     log_debug("Core EGL: Initialized successfully.\n");
      return true;
  }
 
 static void cleanup_egl_core(RendererCoreState* state) {
      if (!state || state->egl_display == EGL_NO_DISPLAY) return;
-     printf("Core EGL: Cleaning up...\n");
+     log_debug("Core EGL: Cleaning up...\n");
      eglMakeCurrent(state->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
      if (state->egl_context != EGL_NO_CONTEXT) {
          eglDestroyContext(state->egl_display, state->egl_context);
@@ -479,12 +480,12 @@ static void cleanup_egl_core(RendererCoreState* state) {
          wl_egl_window_destroy(state->egl_window);
          state->egl_window = NULL;
      }
-      printf("Core EGL: Cleaned up.\n");
+      log_debug("Core EGL: Cleaned up.\n");
  }
 
 
 static bool init_gl_core(RendererCoreState* state) {
-     printf("Core GL: Initializing common resources...\n");
+     log_debug("Core GL: Initializing common resources...\n");
      
      const GLfloat quad_vertices[] = {
          
@@ -513,7 +514,7 @@ static bool init_gl_core(RendererCoreState* state) {
      
      
 
-     printf("Core GL: Common VBO created (ID: %u).\n", state->quad_vbo);
+     log_debug("Core GL: Common VBO created (ID: %u).\n", state->quad_vbo);
      return true;
 }
 
@@ -526,7 +527,7 @@ static void cleanup_gl_core(RendererCoreState* state) {
          
          if (eglGetCurrentContext() == state->egl_context || eglMakeCurrent(state->egl_display, state->egl_surface, state->egl_surface, state->egl_context))
          {
-             printf("Core GL: Deleting common VBO (ID: %u)...\n", state->quad_vbo);
+             log_debug("Core GL: Deleting common VBO (ID: %u)...\n", state->quad_vbo);
              glDeleteBuffers(1, &state->quad_vbo);
              state->quad_vbo = 0;
          } else {
@@ -540,7 +541,7 @@ static void cleanup_gl_core(RendererCoreState* state) {
 
 static bool populate_mode_registry(RendererCoreState* state) {
      if (!state || !state->mode_registry) return false;
-     printf("Core: Populating mode registry...\n");
+     log_debug("Core: Populating mode registry...\n");
      bool success = true;
 
      
@@ -555,7 +556,9 @@ static bool populate_mode_registry(RendererCoreState* state) {
      if (!success) {
           fprintf(stderr, "Core Error: Failed to insert one or more modes into registry!\n");
      } else {
-          printf("Core: Mode registry populated.\n");
+          log_debug("Core: Mode registry populated.\n");
      }
      return success;
 }
+
+

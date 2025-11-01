@@ -18,6 +18,20 @@
 #include <sys/timerfd.h>
 #include <math.h> // Для round()
 
+
+#ifdef ENABLE_DEBUG_LOG
+  #define log_debug(format, ...) \
+      fprintf(stdout, "[DEBUG] %s:%d: " format, \
+      __FILE__, __LINE__, ##__VA_ARGS__)
+
+#else
+  #define log_debug(format, ...) do {} while(0)
+#endif
+
+#define log_error(format, ...) \
+    fprintf(stderr, "[ERROR] %s:%d: " format, \
+    __FILE__, __LINE__, ##__VA_ARGS__)
+
 #include <cairo.h>
 #include <wayland-client.h>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"

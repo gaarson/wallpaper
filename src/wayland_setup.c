@@ -1,3 +1,4 @@
+#include "common.h"
 #include "wayland_setup.h"
 #include "output.h" 
 
@@ -19,14 +20,14 @@ static const struct wl_registry_listener registry_listener = {
 
 
 bool init_wayland(void) {
-    printf("Initializing Wayland connection...\n");
+    log_debug("Initializing Wayland connection...\n");
     g_display = wl_display_connect(NULL); 
     if (!g_display) {
         perror("wl_display_connect failed");
         fprintf(stderr, "Error: Failed to connect to Wayland display. Is WAYLAND_DISPLAY set?\n");
         return false;
     }
-    printf("Connected to Wayland display (fd: %d).\n", wl_display_get_fd(g_display));
+    log_debug("Connected to Wayland display (fd: %d).\n", wl_display_get_fd(g_display));
 
     g_registry = wl_display_get_registry(g_display);
     if (!g_registry) {
@@ -34,24 +35,24 @@ bool init_wayland(void) {
          wl_display_disconnect(g_display); g_display = NULL;
          return false;
     }
-     printf("Got Wayland registry.\n");
+     log_debug("Got Wayland registry.\n");
 
     
     wl_registry_add_listener(g_registry, &registry_listener, NULL);
 
     
-    printf("Performing initial roundtrip to get globals...\n");
+    log_debug("Performing initial roundtrip to get globals...\n");
     if (wl_display_roundtrip(g_display) == -1) {
          perror("wl_display_roundtrip failed after getting registry");
          cleanup_wayland(); 
          return false;
     }
-     printf("Initial roundtrip complete. Globals received:\n");
-     printf("  Compositor: %p\n", (void*)g_compositor);
-     printf("  SHM: %p\n", (void*)g_shm);
-     printf("  Layer Shell: %p\n", (void*)g_layer_shell);
-     printf("  Viewporter: %p%s\n", (void*)g_viewporter, g_viewporter ? "" : " (Not found)");
-     printf("  Fractional Scale Mgr: %p%s\n", (void*)g_fractional_scale_manager, g_fractional_scale_manager ? "" : " (Not found)");
+     log_debug("Initial roundtrip complete. Globals received:\n");
+     log_debug("  Compositor: %p\n", (void*)g_compositor);
+     log_debug("  SHM: %p\n", (void*)g_shm);
+     log_debug("  Layer Shell: %p\n", (void*)g_layer_shell);
+     log_debug("  Viewporter: %p%s\n", (void*)g_viewporter, g_viewporter ? "" : " (Not found)");
+     log_debug("  Fractional Scale Mgr: %p%s\n", (void*)g_fractional_scale_manager, g_fractional_scale_manager ? "" : " (Not found)");
 
 
     
@@ -71,14 +72,14 @@ bool init_wayland(void) {
 
     
     
-    printf("Performing second roundtrip to process output listeners...\n");
+    log_debug("Performing second roundtrip to process output listeners...\n");
     if (wl_display_roundtrip(g_display) == -1) {
          perror("wl_display_roundtrip failed after adding output listeners");
          cleanup_wayland();
          return false;
     }
 
-    printf("Wayland initialization successful. Found %d output(s).\n", n_outputs);
+    log_debug("Wayland initialization successful. Found %d output(s).\n", n_outputs);
     if (n_outputs == 0) {
          fprintf(stderr, "Warning: No outputs found during Wayland initialization.\n");
          
@@ -89,7 +90,7 @@ bool init_wayland(void) {
 
 
 void cleanup_wayland(void) {
-     printf("Cleaning up Wayland resources...\n");
+     log_debug("Cleaning up Wayland resources...\n");
 
      
      cleanup_all_outputs(); 
@@ -98,32 +99,32 @@ void cleanup_wayland(void) {
      if (g_layer_shell) {
          zwlr_layer_shell_v1_destroy(g_layer_shell);
          g_layer_shell = NULL;
-         printf("  Layer shell destroyed.\n");
+         log_debug("  Layer shell destroyed.\n");
      }
      if (g_fractional_scale_manager) {
          wp_fractional_scale_manager_v1_destroy(g_fractional_scale_manager);
          g_fractional_scale_manager = NULL;
-          printf("  Fractional scale manager destroyed.\n");
+          log_debug("  Fractional scale manager destroyed.\n");
      }
     if (g_viewporter) {
          wp_viewporter_destroy(g_viewporter);
          g_viewporter = NULL;
-          printf("  Viewporter destroyed.\n");
+          log_debug("  Viewporter destroyed.\n");
      }
      if (g_shm) {
          wl_shm_destroy(g_shm);
          g_shm = NULL;
-          printf("  SHM destroyed.\n");
+          log_debug("  SHM destroyed.\n");
      }
      if (g_compositor) {
          wl_compositor_destroy(g_compositor);
          g_compositor = NULL;
-          printf("  Compositor destroyed.\n");
+          log_debug("  Compositor destroyed.\n");
      }
      if (g_registry) {
          wl_registry_destroy(g_registry);
          g_registry = NULL;
-          printf("  Registry destroyed.\n");
+          log_debug("  Registry destroyed.\n");
      }
 
      
@@ -135,9 +136,9 @@ void cleanup_wayland(void) {
          }
          wl_display_disconnect(g_display);
          g_display = NULL;
-         printf("Disconnected from Wayland display.\n");
+         log_debug("Disconnected from Wayland display.\n");
      }
-      printf("Wayland cleanup finished.\n");
+      log_debug("Wayland cleanup finished.\n");
 }
 
 
@@ -153,30 +154,30 @@ static void handle_global(void *data, struct wl_registry *reg, uint32_t name, co
         
         uint32_t bind_version = (version < 4) ? version : 4;
         g_compositor = wl_registry_bind(reg, name, &wl_compositor_interface, bind_version);
-        printf("  -> Bound wl_compositor (version %u)\n", bind_version);
+        log_debug("  -> Bound wl_compositor (version %u)\n", bind_version);
     } else if (strcmp(iface, wl_shm_interface.name) == 0) {
          
          g_shm = wl_registry_bind(reg, name, &wl_shm_interface, 1);
-         printf("  -> Bound wl_shm (version 1)\n");
+         log_debug("  -> Bound wl_shm (version 1)\n");
     } else if (strcmp(iface, zwlr_layer_shell_v1_interface.name) == 0) {
         
          uint32_t bind_version = (version < 4) ? version : 4;
          g_layer_shell = wl_registry_bind(reg, name, &zwlr_layer_shell_v1_interface, bind_version);
-         printf("  -> Bound zwlr_layer_shell_v1 (version %u)\n", bind_version);
+         log_debug("  -> Bound zwlr_layer_shell_v1 (version %u)\n", bind_version);
     } else if (strcmp(iface, wp_viewporter_interface.name) == 0) {
          
          g_viewporter = wl_registry_bind(reg, name, &wp_viewporter_interface, 1);
-         printf("  -> Bound wp_viewporter (version 1)\n");
+         log_debug("  -> Bound wp_viewporter (version 1)\n");
     } else if (strcmp(iface, wp_fractional_scale_manager_v1_interface.name) == 0) {
         
          g_fractional_scale_manager = wl_registry_bind(reg, name, &wp_fractional_scale_manager_v1_interface, 1);
-         printf("  -> Bound wp_fractional_scale_manager_v1 (version 1)\n");
+         log_debug("  -> Bound wp_fractional_scale_manager_v1 (version 1)\n");
     } else if (strcmp(iface, wl_output_interface.name) == 0) {
         
         
         uint32_t bind_version = (version < 4) ? version : 4;
         struct wl_output *wl_out = wl_registry_bind(reg, name, &wl_output_interface, bind_version);
-         printf("  -> Found wl_output (name %u, version %u, bound %u)\n", name, version, bind_version);
+         log_debug("  -> Found wl_output (name %u, version %u, bound %u)\n", name, version, bind_version);
         if (wl_out) {
             
             if (!add_output(wl_out, name)) {
@@ -194,15 +195,16 @@ static void handle_global(void *data, struct wl_registry *reg, uint32_t name, co
 static void handle_global_remove(void *data, struct wl_registry *reg, uint32_t name) {
     UNUSED(data);
     UNUSED(reg);
-    printf("Global Removed: Name: %u\n", name);
+    log_debug("Global Removed: Name: %u\n", name);
 
     
     struct client_output *output_to_remove = find_output_by_wl_name(name);
     if (output_to_remove) {
-        printf("  -> Output %u is being removed.\n", name);
+        log_debug("  -> Output %u is being removed.\n", name);
         
         remove_output(output_to_remove);
     }
     
     
 }
+

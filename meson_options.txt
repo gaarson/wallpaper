@@ -1,0 +1,5 @@
+option('debug_logs',
+  type : 'boolean',
+  value : false,  # По умолчанию логгирование ВЫКЛЮЧЕНО
+  description : 'Enable debug log (log_debug) messages.'
+)
