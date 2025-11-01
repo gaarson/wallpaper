@@ -40,6 +40,7 @@ struct client_output {
     bool scale_received;        // Флаг, что мы получили хотя бы один масштаб
 
     bool configured;            // Флаг, что мы получили первую конфигурацию (размеры)
+    bool is_visible;
 
     // Состояние рендерера OpenGL/EGL
     RendererCoreState *renderer_state_gl; // Указатель на состояние рендерера

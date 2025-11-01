@@ -1,4 +1,4 @@
-// mode_starfield.c
+
 #include "starfield.h"
 #include "./../shader_utils.h"
 #include <stdlib.h>
@@ -15,13 +15,11 @@
 #define BASE_LAYER2_SPEED 0.05f
 #define BASE_LAYER3_SPEED 0.1f
 
-
-// --- Структура состояния режима ---
 typedef struct {
     GLuint shader_program;
     double current_time_sec;
 
-    // --- Локации Uniform-переменных ---
+    
     GLint loc_uResolution;
     GLint loc_uTime;
     GLint loc_uSpeed;
@@ -40,11 +38,11 @@ typedef struct {
     GLint loc_uLensSizeMul;
     GLint loc_uLensGlowMul;
     GLint loc_uLensStrengthMul;
-    // (Новая локация)
+    
     GLint loc_uLensSpeedMul;
     GLint loc_uLensChance;
 
-    // --- Текущие значения параметров ---
+    
     float currentSpeed;
     float currentDensity;
     float currentStarThreshold;
@@ -62,16 +60,16 @@ typedef struct {
     float currentLensSizeMul;
     float currentLensGlowMul;
     float currentLensStrengthMul;
-    // (Новый параметр)
+    
     float currentLensSpeedMul;
-    float currentLensChance; // (Новый параметр)
+    float currentLensChance; 
 
 } StarfieldModeState;
 
 static void starfield_update_layer_speeds(StarfieldModeState* state) {
     if (!state) return;
 
-    // Мастер-скорость (currentSpeed) теперь влияет и на боковой скроллинг
+    
     float master_speed_factor = state->currentSpeed;
 
     state->currentLayer1Speed = BASE_LAYER1_SPEED * state->currentParallaxMul * master_speed_factor;
@@ -88,7 +86,7 @@ static GLint get_uniform_location(GLuint program, const char* name) {
 }
 
 
-// --- Инициализация (обновлена) ---
+
 static void* starfield_init(const char* arg, GLuint common_vbo) {
     (void)arg;
     (void)common_vbo;
@@ -100,34 +98,34 @@ static void* starfield_init(const char* arg, GLuint common_vbo) {
         return NULL;
     }
 
-    // --- Установка значений по умолчанию ---
+    
     state->current_time_sec = 0.0;
     state->currentSpeed = 0.5f;
     state->currentDensity = 25.0f;
-    state->currentStarThreshold = 0.9f;
+    state->currentStarThreshold = 1.9f;
     state->currentBrightness = 0.8f;
     state->currentParallaxMul = 1.0f;
 
     starfield_update_layer_speeds(state);
 
-    state->currentStarBrightness = 5.0f;
+    state->currentStarBrightness = 20.0f;
 
-    state->currentNebulaBrightness = 1.5f;
-    state->currentNebulaDensity = 1.5f;
-    state->currentNebulaColor1[0] = 0.1f; state->currentNebulaColor1[1] = 0.040f; state->currentNebulaColor1[2] = 0.2f;
-    state->currentNebulaColor2[0] = 0.4f; state->currentNebulaColor2[1] = 0.3f; state->currentNebulaColor2[2] = 0.3f;
+    state->currentNebulaBrightness = 0.5f;
+    state->currentNebulaDensity = 0.7f;
+    state->currentNebulaColor1[0] = 0.8f; state->currentNebulaColor1[1] = 0.040f; state->currentNebulaColor1[2] = 0.2f;
+    state->currentNebulaColor2[0] = 0.0f; state->currentNebulaColor2[1] = 0.3f; state->currentNebulaColor2[2] = 0.9f;
     
     state->currentLensFieldDensity = 3.5f;
     state->currentLensSizeMul = 1.0f;
-    state->currentLensGlowMul = 3.5f;
+    state->currentLensGlowMul = 0.5f;
     state->currentLensStrengthMul = 1.0f;
     
-    // (Новое)
-    state->currentLensSpeedMul = 1.0f; // По умолчанию летят вместе со звездами
+    
+    state->currentLensSpeedMul = 1.0f; 
 
-    state->currentLensChance = 0.1f; // 10% шанс по умолчанию
+    state->currentLensChance = 0.03f; 
 
-    // --- Создание шейдерной программы ---
+    
     state->shader_program = create_program_from_files(STARFIELD_VERTEX_SHADER, STARFIELD_FRAGMENT_SHADER);
     if (!state->shader_program) {
         fprintf(stderr, "ModeStarfield GLES3 Error: Failed to create shader program.\n");
@@ -135,9 +133,9 @@ static void* starfield_init(const char* arg, GLuint common_vbo) {
         return NULL;
     }
 
-    // --- Получение локаций uniform-переменных (обновлено) ---
+    
     printf("ModeStarfield GLES3: Getting uniform locations...\n");
-    // (Все старые...)
+    
     state->loc_uResolution = get_uniform_location(state->shader_program, "uResolution");
     state->loc_uTime = get_uniform_location(state->shader_program, "uTime");
     state->loc_uSpeed = get_uniform_location(state->shader_program, "uSpeed");
@@ -158,14 +156,14 @@ static void* starfield_init(const char* arg, GLuint common_vbo) {
     state->loc_uLensStrengthMul = get_uniform_location(state->shader_program, "uLensStrengthMul");
     state->loc_uLensChance = get_uniform_location(state->shader_program, "uLensChance");
     
-    // (Новая)
+    
     state->loc_uLensSpeedMul = get_uniform_location(state->shader_program, "uLensSpeedMul");
 
     printf("ModeStarfield GLES3: Initialized (Program ID: %u).\n", state->shader_program);
     return state;
 }
 
-// --- Очистка (без изменений) ---
+
 static void starfield_cleanup(void* mode_state) { /* ... (код без изменений) ... */ 
     StarfieldModeState* state = (StarfieldModeState*)mode_state;
     if (!state) return;
@@ -177,7 +175,7 @@ static void starfield_cleanup(void* mode_state) { /* ... (код без изме
     free(state);
 }
 
-// --- Рендеринг (обновлен) ---
+
 static bool starfield_render(void* mode_state, const RenderParams* params) {
     StarfieldModeState* state = (StarfieldModeState*)mode_state;
     if (!state || !state->shader_program || !params) {
@@ -189,8 +187,8 @@ static bool starfield_render(void* mode_state, const RenderParams* params) {
 
     glUseProgram(state->shader_program);
 
-    // --- Установка всех uniform-переменных ---
-    // (Все старые...)
+    
+    
     if (state->loc_uResolution != -1) glUniform2f(state->loc_uResolution, (GLfloat)params->physical_width, (GLfloat)params->physical_height);
     if (state->loc_uTime != -1) glUniform1f(state->loc_uTime, (GLfloat)state->current_time_sec);
     if (state->loc_uSpeed != -1) glUniform1f(state->loc_uSpeed, state->currentSpeed);
@@ -210,12 +208,12 @@ static bool starfield_render(void* mode_state, const RenderParams* params) {
     if (state->loc_uLensGlowMul != -1) glUniform1f(state->loc_uLensGlowMul, state->currentLensGlowMul);
     if (state->loc_uLensStrengthMul != -1) glUniform1f(state->loc_uLensStrengthMul, state->currentLensStrengthMul);
 
-    // (Новая)
+    
     if (state->loc_uLensSpeedMul != -1) glUniform1f(state->loc_uLensSpeedMul, state->currentLensSpeedMul);
     if (state->loc_uLensChance != -1) glUniform1f(state->loc_uLensChance, state->currentLensChance);
 
 
-    // --- Настройка атрибутов и отрисовка (без изменений) ---
+    
     glBindBuffer(GL_ARRAY_BUFFER, params->common_vbo);
 
     GLint pos_loc = glGetAttribLocation(state->shader_program, "aPosition");
@@ -244,14 +242,14 @@ static bool starfield_render(void* mode_state, const RenderParams* params) {
     return true;
 }
 
-// --- Обработка команд (IPC) (ПЕРЕРАБОТАНА) ---
+
 static bool starfield_handle_command(void* mode_state, const char* command) {
     StarfieldModeState* state = (StarfieldModeState*)mode_state;
     if (!state || !command) return false;
 
     float v1, v2, v3;
 
-    // --- КОМАНДЫ ЗВЕЗД/СКОРОСТИ/ТУМАННОСТИ (без изменений) ---
+    
     if (strcmp(command, "faster") == 0) {
  state->currentSpeed *= 1.25f; if (state->currentSpeed > 10.0f) state->currentSpeed = 10.0f;
  printf("ModeStarfield: Set speed=%.2f\n", state->currentSpeed); 
@@ -298,7 +296,7 @@ return true;
         state->currentStarBrightness = v1 >= 0.0f ? v1 : 0.0f;
         printf("ModeStarfield: Set star brightness=%.2f\n", state->currentStarBrightness); return true;
     
-    // --- НОВЫЕ КОМАНДЫ ДЛЯ ПОЛЯ ЛИНЗ ---
+    
     } else if (sscanf(command, "set_lens_density %f", &v1) == 1) {
         state->currentLensFieldDensity = v1 > 0.0f ? v1 : 0.1f;
         printf("ModeStarfield: Set lens field density=%.2f\n", state->currentLensFieldDensity); 
@@ -316,14 +314,14 @@ return true;
         printf("ModeStarfield: Set lens strength multiplier=%.2f\n", state->currentLensStrengthMul); 
         return true;
         
-    // (НОВАЯ КОМАНДА ДЛЯ СКОРОСТИ ЛИНЗ)
+    
     } else if (sscanf(command, "set_lens_speed_mul %f", &v1) == 1) {
         state->currentLensSpeedMul = v1 >= 0.0f ? v1 : 0.0f;
         printf("ModeStarfield: Set lens speed multiplier=%.2f\n", state->currentLensSpeedMul);
         return true;
     } else if (sscanf(command, "set_lens_chance %f", &v1) == 1) {
         if (v1 < 0.0f) v1 = 0.0f;
-        if (v1 > 1.0f) v1 = 1.0f; // Ограничиваем значение от 0.0 до 1.0
+        if (v1 > 1.0f) v1 = 1.0f; 
         state->currentLensChance = v1;
         printf("ModeStarfield: Set lens chance=%.2f (%.0f%%)\n", state->currentLensChance, state->currentLensChance * 100.0f);
         return true;
@@ -333,18 +331,18 @@ return true;
 }
 
 
-// --- Resize (без изменений) ---
+
 static void starfield_resize(void* mode_state, int physical_width, int physical_height) {
     (void)mode_state; (void)physical_width; (void)physical_height;
 }
 
-// --- Needs Redraw (без изменений) ---
+
 static bool starfield_needs_redraw(void* mode_state) {
     (void)mode_state;
     return true; 
 }
 
-// --- Экземпляр интерфейса (без изменений) ---
+
 const RenderModeInterface starfield_mode_interface = {
     .init = starfield_init,
     .cleanup = starfield_cleanup,

@@ -1,10 +1,10 @@
-// shader_utils.c
+
 #include "shader_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h> // For strlen in some implementations if needed
+#include <string.h> 
 
-// --- Helper function to compile a shader ---
+
 static GLuint compile_shader(GLenum type, const char* source) {
     if (!source) {
         fprintf(stderr, "Shader Error: Shader source is NULL.\n");
@@ -39,10 +39,10 @@ static GLuint compile_shader(GLenum type, const char* source) {
     return shader;
 }
 
-// --- Implementation of header functions ---
+
 
 char* load_shader_source(const char* filename) {
-    FILE* fp = fopen(filename, "rb"); // Use "rb" for potentially better cross-platform compatibility
+    FILE* fp = fopen(filename, "rb"); 
     if (!fp) {
         perror("Shader Utils Error: fopen failed");
         fprintf(stderr, "  -> Failed to open file: %s\n", filename);
@@ -57,9 +57,9 @@ char* load_shader_source(const char* filename) {
         fclose(fp);
         return NULL;
     }
-    rewind(fp); // Same as fseek(fp, 0, SEEK_SET);
+    rewind(fp); 
 
-    // Allocate buffer (+1 for null terminator)
+    
     char* buffer = (char*)malloc(file_size + 1);
     if (!buffer) {
         fprintf(stderr, "Shader Utils Error: malloc failed for shader source buffer (%ld bytes).\n", file_size + 1);
@@ -67,16 +67,16 @@ char* load_shader_source(const char* filename) {
         return NULL;
     }
 
-    // Read the file
+    
     size_t read_size = fread(buffer, 1, file_size, fp);
-    if ((long)read_size != file_size) { // Check if read matches expected size
+    if ((long)read_size != file_size) { 
         fprintf(stderr, "Shader Utils Error: fread failed or read incomplete (%zu/%ld bytes) for file: %s\n", read_size, file_size, filename);
         free(buffer);
         fclose(fp);
         return NULL;
     }
 
-    // Null-terminate the buffer
+    
     buffer[file_size] = '\0';
 
     fclose(fp);
@@ -88,7 +88,7 @@ GLuint create_program_from_files(const char* vertex_shader_path, const char* fra
     printf("Shader Utils: Loading vertex shader: %s\n", vertex_shader_path);
     char* vertex_source = load_shader_source(vertex_shader_path);
     if (!vertex_source) {
-        return 0; // Error message already printed by load_shader_source
+        return 0; 
     }
 
     printf("Shader Utils: Loading fragment shader: %s\n", fragment_shader_path);
@@ -101,12 +101,12 @@ GLuint create_program_from_files(const char* vertex_shader_path, const char* fra
     GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, vertex_source);
     GLuint fragment_shader = compile_shader(GL_FRAGMENT_SHADER, fragment_source);
 
-    // Free the source code strings now that they are compiled (or failed)
+    
     free(vertex_source);
     free(fragment_source);
 
     if (vertex_shader == 0 || fragment_shader == 0) {
-        // Ensure both are deleted if one failed after the other succeeded
+        
         if (vertex_shader != 0) glDeleteShader(vertex_shader);
         if (fragment_shader != 0) glDeleteShader(fragment_shader);
         return 0;
@@ -124,7 +124,7 @@ GLuint create_program_from_files(const char* vertex_shader_path, const char* fra
     glAttachShader(program, fragment_shader);
     glLinkProgram(program);
 
-    // Shaders can be deleted after linking
+    
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
 

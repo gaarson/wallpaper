@@ -1,10 +1,10 @@
 #version 100
-precision mediump float; // Medium precision is usually enough for textures
+precision mediump float; 
 
-uniform sampler2D uTexture; // The texture sampler
-varying vec2 vTexCoord;    // Input: Interpolated texture coordinates from vertex shader
+uniform sampler2D uTexture; 
+varying vec2 vTexCoord;    
 
 void main() {
-    // Sample the texture at the calculated coordinates
+    
     gl_FragColor = texture2D(uTexture, vTexCoord);
 }

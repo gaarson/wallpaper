@@ -1,28 +1,28 @@
-// renderer_core.c
+
 #include "core.h"
 #include "mode.h"
 #include "./../hash_table.h"
-#include "./../shader_utils.h" // May not be directly needed, but good to include
+#include "./../shader_utils.h" 
 
-// Include headers for all known modes to access their interface instances
+
 #include "default.h"
 #include "color.h"
 #include "gradient.h"
 #include "texture.h"
 #include "grid.h"
 #include "starfield.h"
-// #include "mode_grid.h" // Include others as needed
+
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h> // For strcmp
-#include <math.h>   // For round
-#include <time.h>   // For clock_gettime if calculating time internally
+#include <string.h> 
+#include <math.h>   
+#include <time.h>   
 
-// --- Constants ---
-#define MODE_REGISTRY_SIZE 16 // Initial size for the hash table
-                              //
-// #define DEFAULT_MODE_KEY "grid"
+
+#define MODE_REGISTRY_SIZE 16 
+                              
+
 #define DEFAULT_MODE_KEY "default"
 
 #define COLOR_MODE_KEY "color"
@@ -31,15 +31,14 @@
 #define GRID_MODE_KEY "grid"
 #define STARFIELD_MODE_KEY "starfield"
 
-// --- Forward Declarations for Static Helpers ---
+
 static bool init_egl_core(RendererCoreState* state);
 static void cleanup_egl_core(RendererCoreState* state);
 static bool init_gl_core(RendererCoreState* state);
 static void cleanup_gl_core(RendererCoreState* state);
 static bool populate_mode_registry(RendererCoreState* state);
-static const RenderModeInterface* find_mode_implementation(HashTable* registry, const char* arg);
 
-// --- Public API Implementation ---
+
 
 RendererCoreState* renderer_core_init(struct wl_display* display, struct wl_surface* surface,
                                       int initial_logical_width, int initial_logical_height,
@@ -57,9 +56,9 @@ RendererCoreState* renderer_core_init(struct wl_display* display, struct wl_surf
     state->active_mode_impl = NULL;
     state->active_mode_state = NULL;
     state->mode_registry = NULL;
-    state->last_update_time_ms = 0; // Initialize time
+    state->last_update_time_ms = 0; 
 
-    // 1. Create Mode Registry (Hash Table)
+    
     state->mode_registry = ht_create(MODE_REGISTRY_SIZE);
     if (!state->mode_registry) {
         fprintf(stderr, "Core Error: Failed to create mode registry.\n");
@@ -71,14 +70,14 @@ RendererCoreState* renderer_core_init(struct wl_display* display, struct wl_surf
          free(state); return NULL;
     }
 
-    // 2. Initialize EGL
+    
     if (!init_egl_core(state)) {
         fprintf(stderr, "Core Error: EGL initialization failed.\n");
         ht_destroy(state->mode_registry);
         free(state); return NULL;
     }
 
-    // 3. Initialize Core OpenGL resources (needs EGL context active)
+    
     if (!init_gl_core(state)) {
         fprintf(stderr, "Core Error: Core OpenGL resource initialization failed.\n");
         cleanup_egl_core(state);
@@ -86,10 +85,10 @@ RendererCoreState* renderer_core_init(struct wl_display* display, struct wl_surf
         free(state); return NULL;
     }
 
-    // 4. Set initial render mode (use the public function)
+    
     if (!renderer_core_set_mode(state, initial_arg)) {
          fprintf(stderr, "Core Warning: Failed to set initial mode '%s'. Default mode should be active.\n", initial_arg ? initial_arg : "default");
-         // set_mode should have fallen back to default already
+         
     }
 
     printf("Core: Initialization complete.\n");
@@ -100,7 +99,7 @@ void renderer_core_cleanup(RendererCoreState* state) {
     if (!state) return;
     printf("Core: Cleaning up...\n");
 
-    // 1. Clean up the active mode
+    
     if (state->active_mode_impl && state->active_mode_impl->cleanup) {
         printf("Core: Cleaning up active mode...\n");
         state->active_mode_impl->cleanup(state->active_mode_state);
@@ -108,13 +107,13 @@ void renderer_core_cleanup(RendererCoreState* state) {
     state->active_mode_impl = NULL;
     state->active_mode_state = NULL;
 
-    // 2. Clean up core GL resources (VBO)
-    cleanup_gl_core(state); // Needs context
+    
+    cleanup_gl_core(state); 
 
-    // 3. Clean up EGL
-    cleanup_egl_core(state); // Detaches context
+    
+    cleanup_egl_core(state); 
 
-    // 4. Clean up mode registry
+    
     ht_destroy(state->mode_registry);
     state->mode_registry = NULL;
 
@@ -122,41 +121,72 @@ void renderer_core_cleanup(RendererCoreState* state) {
     printf("Core: Cleanup complete.\n");
 }
 
-// Tries to set a mode, falls back to default on failure.
-bool renderer_core_set_mode(RendererCoreState* state, const char* arg) {
+
+bool renderer_core_set_mode(RendererCoreState* state, const char* full_command_arg) {
     if (!state || !state->mode_registry) return false;
-    printf("Core: Setting mode with arg: %s\n", arg ? arg : "(null)");
+    printf("Core: Setting mode with full command: %s\n", full_command_arg ? full_command_arg : "(null)");
 
-    const RenderModeInterface* requested_impl = find_mode_implementation(state->mode_registry, arg);
-    const char* requested_arg_for_init = arg;
+    char* mode_key = NULL;
+    char* mode_arg = NULL;
+    char* command_copy = NULL;
 
+    const RenderModeInterface* requested_impl = NULL;
+
+    if (full_command_arg && full_command_arg[0] != '\0') {
+        
+        command_copy = strdup(full_command_arg);
+        if (!command_copy) {
+            perror("Core set_mode strdup");
+            goto fallback_to_default;
+        }
+
+        char* saveptr;
+        
+        mode_key = strtok_r(command_copy, " \t", &saveptr);
+
+        if (mode_key) {
+            
+            requested_impl = ht_lookup(state->mode_registry, mode_key);
+            
+            if (requested_impl) {
+                
+                mode_arg = saveptr;
+                
+                if (mode_arg) {
+                    while (*mode_arg == ' ' || *mode_arg == '\t') {
+                        mode_arg++;
+                    }
+                    if (*mode_arg == '\0') {
+                        mode_arg = NULL; 
+                    }
+                }
+                printf("Core: Parsed mode key '%s', arg '%s'\n", mode_key, mode_arg ? mode_arg : "(null)");
+            } else {
+                 printf("Core Warning: Mode key '%s' not found in registry. Falling back.\n", mode_key);
+            }
+        }
+    }
+
+fallback_to_default:
     if (!requested_impl) {
-        fprintf(stderr, "Core Warning: No implementation found for arg '%s'. Falling back to default.\n", arg ? arg : "(null)");
+        
+        mode_key = DEFAULT_MODE_KEY;
+        mode_arg = NULL;
         requested_impl = ht_lookup(state->mode_registry, DEFAULT_MODE_KEY);
-        requested_arg_for_init = NULL; // Default mode doesn't need an arg usually
+
         if (!requested_impl) {
-             fprintf(stderr, "Core CRITICAL Error: Default mode implementation not found in registry!\n");
-             // Cannot proceed without a default mode. Clean up old mode if any, but leave state inconsistent.
+             fprintf(stderr, "Core CRITICAL Error: Default mode implementation not found!\n");
+             if (command_copy) free(command_copy);
+             
              if (state->active_mode_impl && state->active_mode_impl->cleanup) {
                  state->active_mode_impl->cleanup(state->active_mode_state);
              }
              state->active_mode_impl = NULL;
              state->active_mode_state = NULL;
-             return false; // Indicate critical failure
+             return false;
         }
     }
-
-    // --- If requested mode is the same as current, do nothing (optimization) ---
-    // Note: This assumes init() is expensive. If init is cheap, we might skip this check.
-    // This check is tricky if the *argument* changes but maps to the *same* mode interface (e.g., different color hex).
-    // Let's simplify: Always try to set the mode. The init function should handle args.
-    // if (state->active_mode_impl == requested_impl) {
-    //     printf("Core: Requested mode is already active.\n");
-    //     // TODO: Potentially check if argument changed and call an 'update' method if needed?
-    //     return true;
-    // }
-
-    // --- Cleanup previous mode ---
+    
     if (state->active_mode_impl && state->active_mode_impl->cleanup) {
         printf("Core: Cleaning up previous mode...\n");
         state->active_mode_impl->cleanup(state->active_mode_state);
@@ -164,26 +194,24 @@ bool renderer_core_set_mode(RendererCoreState* state, const char* arg) {
     state->active_mode_impl = NULL;
     state->active_mode_state = NULL;
 
-    // --- Initialize the new mode ---
+    
     printf("Core: Initializing requested mode...\n");
+
     void* new_state = NULL;
     bool init_success = false;
-    if (requested_impl->init) {
-         // Ensure EGL context is current for GL calls within init()
-        if (eglMakeCurrent(state->egl_display, state->egl_surface, state->egl_surface, state->egl_context) == EGL_FALSE) {
-             fprintf(stderr, "Core Error: eglMakeCurrent failed before mode init (EGL error: 0x%x)\n", eglGetError());
-             // Try falling back to default *without* calling its init (since context failed)
-             state->active_mode_impl = ht_lookup(state->mode_registry, DEFAULT_MODE_KEY); // Just set pointer
-             state->active_mode_state = (void*)1; // Dummy state
-             return false; // Indicate error, but default *might* work if it doesn't use GL in render
-        }
-        new_state = requested_impl->init(requested_arg_for_init, state->quad_vbo);
-        init_success = (new_state != NULL);
-    } else {
-         fprintf(stderr, "Core Error: Requested mode implementation has no init function!\n");
-         init_success = false;
-    }
 
+    
+    if (eglMakeCurrent(state->egl_display, state->egl_surface, state->egl_surface, state->egl_context) == EGL_FALSE) {
+         fprintf(stderr, "Core Error: eglMakeCurrent failed before mode init (EGL error: 0x%x)\n", eglGetError());
+         if (command_copy) free(command_copy);
+         return false;
+    }
+    
+    
+    new_state = requested_impl->init(mode_arg, state->quad_vbo); 
+    init_success = (new_state != NULL);
+
+    if (command_copy) free(command_copy);
 
     if (init_success) {
         printf("Core: Mode initialized successfully.\n");
@@ -191,13 +219,13 @@ bool renderer_core_set_mode(RendererCoreState* state, const char* arg) {
         state->active_mode_state = new_state;
     } else {
         fprintf(stderr, "Core Error: Failed to initialize requested mode. Falling back to default.\n");
-        // Cleanup might have already happened if init partially failed, but call again just in case
-        if(requested_impl->cleanup) requested_impl->cleanup(new_state); // new_state might be NULL or partially init'd
+        
+        if(requested_impl->cleanup) requested_impl->cleanup(new_state); 
 
         const RenderModeInterface* default_impl = ht_lookup(state->mode_registry, DEFAULT_MODE_KEY);
         if (default_impl && default_impl->init) {
              printf("Core: Initializing default mode...\n");
-             // Context should still be current from previous attempt
+             
              new_state = default_impl->init(NULL, state->quad_vbo);
              if (new_state) {
                  state->active_mode_impl = default_impl;
@@ -205,16 +233,16 @@ bool renderer_core_set_mode(RendererCoreState* state, const char* arg) {
                  printf("Core: Default mode initialized successfully.\n");
              } else {
                  fprintf(stderr, "Core CRITICAL Error: Failed to initialize default mode!\n");
-                 // No mode active, rendering will likely just clear screen.
-                 return false; // Indicate failure to set even default
+                 
+                 return false; 
              }
         } else {
              fprintf(stderr, "Core CRITICAL Error: Default mode implementation or its init not found!\n");
-             return false; // Indicate critical failure
+             return false; 
         }
     }
 
-    // Notify the newly set mode (whether requested or default) of the current size
+    
     if (state->active_mode_impl && state->active_mode_impl->resize) {
          int physical_width = (int)round(state->current_logical_width * state->current_scale);
          int physical_height = (int)round(state->current_logical_height * state->current_scale);
@@ -222,107 +250,93 @@ bool renderer_core_set_mode(RendererCoreState* state, const char* arg) {
          state->active_mode_impl->resize(state->active_mode_state, physical_width, physical_height);
     }
 
-    return true; // Mode was set (either requested or default)
+    return true; 
 }
 
 
 bool renderer_core_handle_command(RendererCoreState* state, const char* command) {
-     if (!state || !command) return false;
-     printf("Core: Handling command: %s\n", command);
+    if (!state || !command) return false;
+    printf("Core: Handling command: %s\n", command);
 
-     // Determine if it's potentially a mode-setting command based on common patterns
-     // A more robust way might be needed if commands overlap with paths etc.
-     bool potential_mode_command = (command[0] == '\0' || command[0] == '#' || command[0] == '/' || strstr(command, "%SETUP") != NULL);
+    if (state->active_mode_impl && state->active_mode_impl->handle_command) {
+        if (state->active_mode_impl->handle_command(state->active_mode_state, command)) {
+            printf("Core: Command handled by active mode.\n");
+            return true; 
+        }
+    }
 
-     if (potential_mode_command) {
-         // Let set_mode handle the logic, including fallback and checking if mode actually changed
-         // We return true because we attempted to handle it as a mode command.
-         // The return value of set_mode indicates success/failure of setting *that specific mode*.
-         renderer_core_set_mode(state, command);
-         return true; // Indicate command was processed (as a mode set attempt)
-     }
-
-     // If not a mode command, delegate to the active mode
-     if (state->active_mode_impl && state->active_mode_impl->handle_command) {
-         if (state->active_mode_impl->handle_command(state->active_mode_state, command)) {
-             printf("Core: Command handled by active mode.\n");
-             return true; // Handled by mode
-         }
-     }
-
-     printf("Core: Command not handled.\n");
-     return false; // Not handled
- }
-
+    printf("Core: Command not handled by active mode.\n");
+    return false; 
+}
 
 bool renderer_core_render_frame(RendererCoreState* state, uint32_t time_ms) {
      if (!state || !state->egl_display || !state->egl_context || !state->egl_surface) {
          fprintf(stderr, "Core Error: Invalid EGL state in render_frame.\n");
          return false;
      }
-     // Use current dimensions/scale from state
+     
      if (state->current_logical_width <= 0 || state->current_logical_height <= 0 || state->current_scale <= 0) {
           fprintf(stderr, "Core Warning: Invalid dimensions/scale in state: %dx%d @ %.2f\n",
                   state->current_logical_width, state->current_logical_height, state->current_scale);
-          return true; // Skip frame, not fatal
+          return true; 
      }
 
 
      if (eglMakeCurrent(state->egl_display, state->egl_surface, state->egl_surface, state->egl_context) == EGL_FALSE) {
          fprintf(stderr, "Core Error: eglMakeCurrent failed in render_frame (EGL error: 0x%x)\n", eglGetError());
-         return false; // Critical error
+         return false; 
      }
 
-     // Calculate delta time
-     uint64_t current_time_ms = time_ms; // Use provided time directly
+     
+     uint64_t current_time_ms = time_ms; 
      uint32_t delta_time_ms_u32 = 0;
      if (state->last_update_time_ms != 0 && current_time_ms >= state->last_update_time_ms) {
-          // Ensure difference fits in uint32_t, though unlikely to exceed 49 days...
+          
          uint64_t diff = current_time_ms - state->last_update_time_ms;
          delta_time_ms_u32 = (diff > UINT32_MAX) ? UINT32_MAX : (uint32_t)diff;
      } else if (state->last_update_time_ms == 0) {
-          delta_time_ms_u32 = 16; // Assume ~60fps for first frame delta
+          delta_time_ms_u32 = 16; 
      }
      state->last_update_time_ms = current_time_ms;
 
      double time_delta_sec = delta_time_ms_u32 / 1000.0;
-     // Clamp delta time to avoid huge jumps after lag
+     
      const double MAX_DELTA_TIME_SEC = 0.1;
      if (time_delta_sec > MAX_DELTA_TIME_SEC) {
          time_delta_sec = MAX_DELTA_TIME_SEC;
      }
 
-     // Set viewport using state values
+     
      int physical_width = (int)round(state->current_logical_width * state->current_scale);
      int physical_height = (int)round(state->current_logical_height * state->current_scale);
      glViewport(0, 0, physical_width, physical_height);
 
-     // Prepare render parameters
+     
      RenderParams params = {
          .physical_width = physical_width,
          .physical_height = physical_height,
-         .time_ms = time_ms, // Pass original time_ms from compositor
+         .time_ms = time_ms, 
          .time_delta_sec = time_delta_sec,
          .common_vbo = state->quad_vbo
-         // .core_state = state // Pass core state if modes need it
+         
      };
 
-     // Call the active mode's render function
+     
      bool success = true;
      if (state->active_mode_impl && state->active_mode_impl->render) {
          success = state->active_mode_impl->render(state->active_mode_state, &params);
      } else {
-         // Should have fallen back to default mode which has a render function.
-         // If we reach here, something is wrong (e.g., default mode failed init critically).
-         // Clear to an error color (e.g., bright red).
+         
+         
+         
          fprintf(stderr, "Core CRITICAL Error: No active mode or render function available!\n");
          glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
          glClear(GL_COLOR_BUFFER_BIT);
-         success = false; // Indicate an error occurred
+         success = false; 
      }
 
-     // Check for GL errors (optional, for debugging)
-     // GLenum err; while ((err = glGetError()) != GL_NO_ERROR) fprintf(stderr, "Core OpenGL Error: 0x%x\n", err);
+     
+     
 
      return success;
  }
@@ -332,14 +346,14 @@ bool renderer_core_swap_buffers(RendererCoreState* state) {
           fprintf(stderr, "Core Error: Invalid EGL state in swap_buffers.\n");
           return false;
      }
-     // Don't strictly need MakeCurrent here, but doesn't hurt usually.
-     // if (eglMakeCurrent(...) == EGL_FALSE) { return false; }
+     
+     
 
      EGLBoolean swapped = eglSwapBuffers(state->egl_display, state->egl_surface);
      if (!swapped) {
          EGLint error = eglGetError();
          fprintf(stderr, "Core Error: eglSwapBuffers failed (EGL error: 0x%x)\n", error);
-         // Check for EGL_BAD_SURFACE or EGL_CONTEXT_LOST which might require re-init
+         
          return false;
      }
      return true;
@@ -352,7 +366,7 @@ void renderer_core_resize(RendererCoreState* state, int logical_width, int logic
          return;
      }
 
-     // Update core state
+     
      state->current_logical_width = logical_width;
      state->current_logical_height = logical_height;
      state->current_scale = scale;
@@ -364,7 +378,7 @@ void renderer_core_resize(RendererCoreState* state, int logical_width, int logic
             logical_width, logical_height, physical_width, physical_height, scale);
 
 
-     // Resize EGL window surface
+     
      if (state->egl_window) {
          wl_egl_window_resize(state->egl_window, physical_width, physical_height, 0, 0);
           printf("Core: Resized wl_egl_window.\n");
@@ -373,11 +387,11 @@ void renderer_core_resize(RendererCoreState* state, int logical_width, int logic
      }
 
 
-     // Notify the active mode
+     
      if (state->active_mode_impl && state->active_mode_impl->resize) {
           printf("Core: Notifying active mode of resize.\n");
-         // Ensure context is current if mode's resize needs GL calls
-         // if (eglMakeCurrent(...) == EGL_FALSE) { /* handle error */ }
+         
+         
          state->active_mode_impl->resize(state->active_mode_state, physical_width, physical_height);
      }
  }
@@ -386,16 +400,16 @@ bool renderer_core_needs_redraw(RendererCoreState* state) {
     if (state && state->active_mode_impl && state->active_mode_impl->needs_redraw) {
         return state->active_mode_impl->needs_redraw(state->active_mode_state);
     }
-    // If no mode active or function missing, assume static (no redraw needed)
+    
     return false;
 }
 
 
-// --- Static Helper Implementations ---
+
 
 static bool init_egl_core(RendererCoreState* state) {
      printf("Core EGL: Initializing...\n");
-     // Use state->wayland_display
+     
      state->egl_display = eglGetDisplay((EGLNativeDisplayType)state->wayland_display);
      if (state->egl_display == EGL_NO_DISPLAY) { /*...*/ return false; }
 
@@ -403,7 +417,7 @@ static bool init_egl_core(RendererCoreState* state) {
      if (eglInitialize(state->egl_display, &major, &minor) == EGL_FALSE) { /*...*/ return false; }
      printf("Core EGL: Version %d.%d\n", major, minor);
 
-     // Config attributes (same as before)
+     
      const EGLint config_attribs[] = {
          EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
          EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
@@ -414,23 +428,23 @@ static bool init_egl_core(RendererCoreState* state) {
          /*...*/ eglTerminate(state->egl_display); return false;
      }
 
-     // Context attributes (ES 2.0)
+     
      const EGLint context_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE };
      state->egl_context = eglCreateContext(state->egl_display, state->egl_config, EGL_NO_CONTEXT, context_attribs);
      if (state->egl_context == EGL_NO_CONTEXT) { /*...*/ eglTerminate(state->egl_display); return false; }
 
-     // Create Wayland EGL window
+     
      int physical_width = (int)round(state->current_logical_width * state->current_scale);
      int physical_height = (int)round(state->current_logical_height * state->current_scale);
-     // Use state->wayland_surface
+     
      state->egl_window = wl_egl_window_create(state->wayland_surface, physical_width, physical_height);
      if (!state->egl_window) { /*...*/ eglDestroyContext(state->egl_display, state->egl_context); eglTerminate(state->egl_display); return false; }
 
-     // Create EGL surface
+     
      state->egl_surface = eglCreateWindowSurface(state->egl_display, state->egl_config, (EGLNativeWindowType)state->egl_window, NULL);
      if (state->egl_surface == EGL_NO_SURFACE) { /*...*/ wl_egl_window_destroy(state->egl_window); /*...*/ return false; }
 
-     // Make context current for init_gl_core
+     
      if (eglMakeCurrent(state->egl_display, state->egl_surface, state->egl_surface, state->egl_context) == EGL_FALSE) {
          fprintf(stderr, "Core EGL Error: eglMakeCurrent failed during init (error 0x%x)\n", eglGetError());
          /* Full cleanup */
@@ -441,7 +455,7 @@ static bool init_egl_core(RendererCoreState* state) {
          return false;
      }
 
-     eglSwapInterval(state->egl_display, 1); // Enable VSync
+     eglSwapInterval(state->egl_display, 1); 
      printf("Core EGL: Initialized successfully.\n");
      return true;
  }
@@ -471,16 +485,16 @@ static void cleanup_egl_core(RendererCoreState* state) {
 
 static bool init_gl_core(RendererCoreState* state) {
      printf("Core GL: Initializing common resources...\n");
-     // Create VBO for quad (X, Y, U, V)
+     
      const GLfloat quad_vertices[] = {
-         // Tri 1
-         -1.0f, -1.0f, 0.0f, 0.0f, // BL
-          1.0f, -1.0f, 1.0f, 0.0f, // BR
-         -1.0f,  1.0f, 0.0f, 1.0f, // TL
-         // Tri 2
-          1.0f, -1.0f, 1.0f, 0.0f, // BR
-          1.0f,  1.0f, 1.0f, 1.0f, // TR
-         -1.0f,  1.0f, 0.0f, 1.0f  // TL
+         
+         -1.0f, -1.0f, 0.0f, 0.0f, 
+          1.0f, -1.0f, 1.0f, 0.0f, 
+         -1.0f,  1.0f, 0.0f, 1.0f, 
+         
+          1.0f, -1.0f, 1.0f, 0.0f, 
+          1.0f,  1.0f, 1.0f, 1.0f, 
+         -1.0f,  1.0f, 0.0f, 1.0f  
      };
 
      glGenBuffers(1, &state->quad_vbo);
@@ -490,14 +504,14 @@ static bool init_gl_core(RendererCoreState* state) {
      }
      glBindBuffer(GL_ARRAY_BUFFER, state->quad_vbo);
      glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), quad_vertices, GL_STATIC_DRAW);
-     glBindBuffer(GL_ARRAY_BUFFER, 0); // Unbind
+     glBindBuffer(GL_ARRAY_BUFFER, 0); 
 
-     // Set common GL states
+     
      glDisable(GL_DEPTH_TEST);
      glDisable(GL_STENCIL_TEST);
-     // Blending might be enabled by specific modes if needed
-     // glEnable(GL_BLEND);
-     // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+     
+     
+     
 
      printf("Core GL: Common VBO created (ID: %u).\n", state->quad_vbo);
      return true;
@@ -507,9 +521,9 @@ static bool init_gl_core(RendererCoreState* state) {
 static void cleanup_gl_core(RendererCoreState* state) {
      if (!state || state->quad_vbo == 0) return;
 
-     // Ensure context is current before deleting GL resources
+     
      if (state->egl_display != EGL_NO_DISPLAY && state->egl_context != EGL_NO_CONTEXT) {
-         // It might be better practice to ensure MakeCurrent succeeds before delete
+         
          if (eglGetCurrentContext() == state->egl_context || eglMakeCurrent(state->egl_display, state->egl_surface, state->egl_surface, state->egl_context))
          {
              printf("Core GL: Deleting common VBO (ID: %u)...\n", state->quad_vbo);
@@ -529,14 +543,14 @@ static bool populate_mode_registry(RendererCoreState* state) {
      printf("Core: Populating mode registry...\n");
      bool success = true;
 
-     // Insert each known mode implementation with its designated key
+     
      success &= ht_insert(state->mode_registry, DEFAULT_MODE_KEY, &default_mode_interface);
      success &= ht_insert(state->mode_registry, COLOR_MODE_KEY, &color_mode_interface);
      success &= ht_insert(state->mode_registry, GRADIENT_MODE_KEY, &gradient_mode_interface);
      success &= ht_insert(state->mode_registry, GRID_MODE_KEY, &grid_mode_interface);
      success &= ht_insert(state->mode_registry, TEXTURE_MODE_KEY, &texture_mode_interface);
      success &= ht_insert(state->mode_registry, STARFIELD_MODE_KEY, &starfield_mode_interface);
-     // success &= ht_insert(state->mode_registry, GRID_MODE_KEY, &grid_mode_interface);
+     
 
      if (!success) {
           fprintf(stderr, "Core Error: Failed to insert one or more modes into registry!\n");
@@ -544,36 +558,4 @@ static bool populate_mode_registry(RendererCoreState* state) {
           printf("Core: Mode registry populated.\n");
      }
      return success;
-}
-
-// Determines the mode 'type' (key) based on argument format
-static const RenderModeInterface* find_mode_implementation(HashTable* registry, const char* arg) {
-     const char* mode_key = DEFAULT_MODE_KEY; // Start assuming default
-
-     if (arg) {
-         if (arg[0] == '#') {
-             mode_key = COLOR_MODE_KEY;
-         } else if (strcmp(arg, "%SETUP_ANIMATION%") == 0) { // Specific command for gradient
-             // mode_key = DEFAULT_MODE_KEY;
-             mode_key = GRADIENT_MODE_KEY;
-         } else if (strcmp(arg, "%SETUP_STARFIELD%") == 0) { // <-- ДОБАВЬ ЭТОТ БЛОК
-            mode_key = STARFIELD_MODE_KEY;
-         } else if (strcmp(arg, "%SETUP_GRID%") == 0) { // Example for grid
-             mode_key = GRID_MODE_KEY;
-         } else if (arg[0] != '\0') {
-             // Assume anything else non-empty is a texture path for now
-             // More robust checking (file exists, extension?) could be added here
-             mode_key = TEXTURE_MODE_KEY;
-         }
-         // else: arg is empty string -> keep default
-     } // else: arg is NULL -> keep default
-
-     printf("Core: Determined mode key '%s' for argument '%s'\n", mode_key, arg ? arg : "(null)");
-     const RenderModeInterface* impl = ht_lookup(registry, mode_key);
-     if (!impl) {
-          fprintf(stderr, "Core Warning: Mode key '%s' not found in registry!\n", mode_key);
-          // Fallback to default explicitly if lookup failed
-          impl = ht_lookup(registry, DEFAULT_MODE_KEY);
-     }
-     return impl;
 }

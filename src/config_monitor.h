@@ -13,7 +13,7 @@
 //               Владение строкой остается у модуля config_monitor, НЕ освобождать ее в main.c!
 // - animation_enabled: true, если текущий режим - анимация.
 // - user_data: Произвольный указатель, переданный при инициализации.
-typedef void (*config_change_callback_t)(const char *new_command, bool animation_enabled, void *user_data);
+typedef void (*config_change_callback_t)(const char *new_command, void *user_data);
 
 /**
  * @brief Инициализирует монитор конфигурации.
@@ -67,7 +67,7 @@ const char* config_monitor_get_current_command(void);
  */
 void config_monitor_cleanup(void);
 
-void on_config_changed(const char *new_command, bool new_animation_state, void *user_data);
+void on_config_changed(const char *new_command, void *user_data);
 
 
 #endif // CONFIG_MONITOR_H
